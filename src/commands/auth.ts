@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { saveConfig, clearConfig, getTokenSource, getBaseUrl } from "../lib/auth.js";
@@ -23,6 +24,19 @@ async function prompt(question: string): Promise<string> {
 	}
 }
 
+async function promptSecret(question: string): Promise<string> {
+	process.stdout.write(question);
+	const mutedOutput = new Writable({ write(_, __, cb) { cb(); } });
+	const rl = createInterface({ input: process.stdin, output: mutedOutput, terminal: true });
+	try {
+		const answer = await rl.question("");
+		process.stdout.write("\n");
+		return answer;
+	} finally {
+		rl.close();
+	}
+}
+
 export function registerAuthCommand(program: Command): void {
 	const auth = program.command("auth").description("Manage authentication");
 
@@ -30,7 +44,7 @@ export function registerAuthCommand(program: Command): void {
 		.command("login")
 		.description("Authenticate with an Outline instance")
 		.action(async () => {
-			const token = await prompt("API token: ");
+			const token = await promptSecret("API token: ");
 			if (!token.trim()) {
 				console.error(chalk.red("Token is required."));
 				process.exit(1);
