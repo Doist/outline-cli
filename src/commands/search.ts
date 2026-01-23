@@ -1,12 +1,14 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { apiRequest } from "../lib/api.js";
+import { getBaseUrl } from "../lib/auth.js";
 import { getOutputOptions, outputList } from "../lib/output.js";
 
 interface SearchResult {
 	document: {
 		id: string;
 		title: string;
+		url: string;
 		urlId: string;
 		collectionId: string;
 	};
@@ -20,13 +22,13 @@ function formatResult(result: SearchResult): string {
 	const { document, context } = result;
 	const title = chalk.bold(document.title);
 	const id = chalk.dim(document.urlId);
-	// Convert API search highlights (<b> tags) to bold terminal text
+	const link = chalk.dim(`${getBaseUrl()}${document.url}`);
 	const snippet = context
 		.replace(/<b>(.*?)<\/b>/g, (_, m) => chalk.bold(m))
 		.replace(/<\/?b>/g, "")
 		.trim()
 		.slice(0, 120);
-	return `${title} ${id}\n  ${chalk.dim(snippet)}`;
+	return `${title} ${id}\n  ${link}\n  ${chalk.dim(snippet)}\n`;
 }
 
 export function registerSearchCommand(program: Command): void {
