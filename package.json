@@ -1,36 +1,38 @@
 {
-  "name": "outline-cli",
-  "version": "0.1.0",
-  "description": "CLI for the Outline wiki/knowledge base API",
-  "type": "module",
-  "bin": {
-    "ol": "./dist/index.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "type-check": "tsc --noEmit",
-    "format": "biome check --write",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "keywords": [
-    "outline",
-    "wiki",
-    "cli"
-  ],
-  "license": "MIT",
-  "dependencies": {
-    "chalk": "5.6.2",
-    "commander": "14.0.2",
-    "marked": "15.0.12",
-    "marked-terminal": "7.3.0",
-    "yocto-spinner": "1.0.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.3.12",
-    "@types/node": "25.0.10",
-    "typescript": "5.9.3",
-    "vitest": "4.0.18"
-  }
+	"name": "outline-cli",
+	"version": "0.1.0",
+	"description": "CLI for the Outline wiki/knowledge base API",
+	"type": "module",
+	"bin": {
+		"ol": "./dist/index.js"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"type-check": "tsc --noEmit",
+		"format": "biome check --write",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"prepare": "lefthook install"
+	},
+	"keywords": [
+		"outline",
+		"wiki",
+		"cli"
+	],
+	"license": "MIT",
+	"dependencies": {
+		"chalk": "5.6.2",
+		"commander": "14.0.2",
+		"marked": "15.0.12",
+		"marked-terminal": "7.3.0",
+		"yocto-spinner": "1.0.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.12",
+		"@types/node": "25.0.10",
+		"lefthook": "2.0.15",
+		"typescript": "5.9.3",
+		"vitest": "4.0.18"
+	}
 }

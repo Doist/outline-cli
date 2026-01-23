@@ -1,0 +1,13 @@
+pre-commit:
+  commands:
+    type-check:
+      run: npm run type-check
+    biome:
+      glob: '*.{ts,js,json}'
+      run: npx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    test:
+      run: npm test
