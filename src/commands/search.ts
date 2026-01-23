@@ -20,7 +20,12 @@ function formatResult(result: SearchResult): string {
 	const { document, context } = result;
 	const title = chalk.bold(document.title);
 	const id = chalk.dim(document.urlId);
-	const snippet = context.replace(/<\/?b>/g, "").trim().slice(0, 120);
+	// Convert API search highlights (<b> tags) to bold terminal text
+	const snippet = context
+		.replace(/<b>(.*?)<\/b>/g, (_, m) => chalk.bold(m))
+		.replace(/<\/?b>/g, "")
+		.trim()
+		.slice(0, 120);
 	return `${title} ${id}\n  ${chalk.dim(snippet)}`;
 }
 

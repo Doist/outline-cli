@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { apiRequest } from "../lib/api.js";
+import { renderMarkdown } from "../lib/markdown.js";
 import { getOutputOptions, outputItem, outputList } from "../lib/output.js";
 
 interface Document {
@@ -98,6 +99,7 @@ export function registerDocumentCommand(program: Command): void {
 	doc
 		.command("get <id>")
 		.description("Get a document by URL ID or ID")
+		.option("--raw", "Output raw markdown without terminal formatting")
 		.option("--json", "Output JSON")
 		.option("--full", "Include all fields in JSON output")
 		.action(async (id: string, opts) => {
@@ -109,7 +111,8 @@ export function registerDocumentCommand(program: Command): void {
 			if (outputOpts.json) {
 				outputItem(data, formatDocFull, essentialKeys, outputOpts);
 			} else {
-				console.log(formatDocFull(data));
+				const content = formatDocFull(data);
+				console.log(opts.raw ? content : renderMarkdown(content));
 			}
 		});
 
