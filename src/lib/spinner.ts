@@ -1,5 +1,5 @@
-import yoctoSpinner from "yocto-spinner";
 import chalk from "chalk";
+import yoctoSpinner from "yocto-spinner";
 
 export interface SpinnerOptions {
 	text: string;

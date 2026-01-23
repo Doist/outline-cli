@@ -1,6 +1,12 @@
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 
 interface Config {
 	api_token?: string;
@@ -59,7 +65,7 @@ export function saveConfig(token: string, baseUrl?: string): void {
 	if (baseUrl) {
 		config.base_url = baseUrl.replace(/\/$/, "");
 	}
-	writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
+	writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 export function clearConfig(): void {

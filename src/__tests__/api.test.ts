@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/auth.js", () => ({
 	getApiToken: () => "test-token",
@@ -59,12 +59,17 @@ describe("apiRequest", () => {
 			ok: false,
 			status: 401,
 			statusText: "Unauthorized",
-			json: async () => ({ error: "auth_required", message: "Authentication required" }),
+			json: async () => ({
+				error: "auth_required",
+				message: "Authentication required",
+			}),
 		};
 		(fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
 		const { apiRequest } = await import("../lib/api.js");
-		await expect(apiRequest("auth.info")).rejects.toThrow("Authentication required");
+		await expect(apiRequest("auth.info")).rejects.toThrow(
+			"Authentication required",
+		);
 	});
 
 	it("throws generic message when no API error body", async () => {
@@ -72,11 +77,15 @@ describe("apiRequest", () => {
 			ok: false,
 			status: 500,
 			statusText: "Internal Server Error",
-			json: async () => { throw new Error("not json"); },
+			json: async () => {
+				throw new Error("not json");
+			},
 		};
 		(fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
 		const { apiRequest } = await import("../lib/api.js");
-		await expect(apiRequest("documents.list")).rejects.toThrow("API error: 500 Internal Server Error");
+		await expect(apiRequest("documents.list")).rejects.toThrow(
+			"API error: 500 Internal Server Error",
+		);
 	});
 });

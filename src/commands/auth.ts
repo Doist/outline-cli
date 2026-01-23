@@ -1,9 +1,14 @@
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
-import type { Command } from "commander";
 import chalk from "chalk";
-import { saveConfig, clearConfig, getTokenSource, getBaseUrl } from "../lib/auth.js";
+import type { Command } from "commander";
 import { apiRequest } from "../lib/api.js";
+import {
+	clearConfig,
+	getBaseUrl,
+	getTokenSource,
+	saveConfig,
+} from "../lib/auth.js";
 
 interface TeamInfo {
 	name: string;
@@ -26,8 +31,16 @@ async function prompt(question: string): Promise<string> {
 
 async function promptSecret(question: string): Promise<string> {
 	process.stdout.write(question);
-	const mutedOutput = new Writable({ write(_, __, cb) { cb(); } });
-	const rl = createInterface({ input: process.stdin, output: mutedOutput, terminal: true });
+	const mutedOutput = new Writable({
+		write(_, __, cb) {
+			cb();
+		},
+	});
+	const rl = createInterface({
+		input: process.stdin,
+		output: mutedOutput,
+		terminal: true,
+	});
 	try {
 		const answer = await rl.question("");
 		process.stdout.write("\n");
@@ -60,10 +73,15 @@ export function registerAuthCommand(program: Command): void {
 			try {
 				const { data } = await apiRequest<AuthInfoResponse>("auth.info");
 				console.log(
-					chalk.green(`Authenticated to ${data.team.name} as ${data.user.name}`),
+					chalk.green(
+						`Authenticated to ${data.team.name} as ${data.user.name}`,
+					),
 				);
 			} catch (err) {
-				console.log(chalk.yellow("Token saved, but could not verify:"), (err as Error).message);
+				console.log(
+					chalk.yellow("Token saved, but could not verify:"),
+					(err as Error).message,
+				);
 			}
 		});
 
@@ -85,7 +103,10 @@ export function registerAuthCommand(program: Command): void {
 				console.log(`Team: ${chalk.bold(data.team.name)}`);
 				console.log(`User: ${data.user.name} (${data.user.email})`);
 			} catch (err) {
-				console.error(chalk.red("Could not fetch auth info:"), (err as Error).message);
+				console.error(
+					chalk.red("Could not fetch auth info:"),
+					(err as Error).message,
+				);
 				process.exit(1);
 			}
 		});

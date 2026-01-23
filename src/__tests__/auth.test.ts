@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const TEST_HOME = join(tmpdir(), "outline-cli-test-" + process.pid);
+const TEST_HOME = join(tmpdir(), `outline-cli-test-${process.pid}`);
 const TEST_CONFIG_DIR = join(TEST_HOME, ".config", "outline-cli");
 const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, "config.json");
 
@@ -11,7 +11,7 @@ vi.mock("node:os", async () => {
 	const actual = await vi.importActual<typeof import("node:os")>("node:os");
 	return {
 		...actual,
-		homedir: () => join(tmpdir(), "outline-cli-test-" + process.pid),
+		homedir: () => join(tmpdir(), `outline-cli-test-${process.pid}`),
 	};
 });
 
@@ -36,7 +36,10 @@ describe("auth", () => {
 	});
 
 	it("getApiToken reads from config file", async () => {
-		writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ api_token: "file-token" }));
+		writeFileSync(
+			TEST_CONFIG_PATH,
+			JSON.stringify({ api_token: "file-token" }),
+		);
 		const { getApiToken } = await import("../lib/auth.js");
 		expect(getApiToken()).toBe("file-token");
 	});
@@ -64,7 +67,9 @@ describe("auth", () => {
 	});
 
 	it("saveConfig and clearConfig work", async () => {
-		const { saveConfig, clearConfig, getApiToken } = await import("../lib/auth.js");
+		const { saveConfig, clearConfig, getApiToken } = await import(
+			"../lib/auth.js"
+		);
 		saveConfig("test-token", "https://wiki.test.com");
 		expect(getApiToken()).toBe("test-token");
 		clearConfig();

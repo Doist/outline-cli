@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Command } from "commander";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/auth.js", () => ({
 	getApiToken: () => "test-token",
@@ -32,7 +32,12 @@ describe("search command", () => {
 		(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
 			data: [
 				{
-					document: { id: "1", title: "Test Doc", urlId: "test-doc-abc", collectionId: "c1" },
+					document: {
+						id: "1",
+						title: "Test Doc",
+						urlId: "test-doc-abc",
+						collectionId: "c1",
+					},
 					context: "Some <b>context</b> here",
 					ranking: 0.9,
 				},
@@ -45,7 +50,14 @@ describe("search command", () => {
 		program.exitOverride();
 		registerSearchCommand(program);
 
-		await program.parseAsync(["node", "ol", "search", "test query", "--limit", "10"]);
+		await program.parseAsync([
+			"node",
+			"ol",
+			"search",
+			"test query",
+			"--limit",
+			"10",
+		]);
 
 		expect(apiRequest).toHaveBeenCalledWith("documents.search", {
 			query: "test query",
@@ -58,7 +70,12 @@ describe("search command", () => {
 		(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
 			data: [
 				{
-					document: { id: "1", title: "Test", urlId: "test-abc", collectionId: "c1" },
+					document: {
+						id: "1",
+						title: "Test",
+						urlId: "test-abc",
+						collectionId: "c1",
+					},
 					context: "snippet",
 					ranking: 0.9,
 				},
@@ -109,7 +126,13 @@ describe("document commands", () => {
 		program.exitOverride();
 		registerDocumentCommand(program);
 
-		await program.parseAsync(["node", "ol", "document", "get", "my-doc-abc123"]);
+		await program.parseAsync([
+			"node",
+			"ol",
+			"document",
+			"get",
+			"my-doc-abc123",
+		]);
 
 		expect(apiRequest).toHaveBeenCalledWith("documents.info", { id: "abc123" });
 		expect(logs[0]).toContain("# My Doc");
@@ -127,7 +150,16 @@ describe("document commands", () => {
 		program.exitOverride();
 		registerDocumentCommand(program);
 
-		await program.parseAsync(["node", "ol", "document", "list", "--limit", "10", "--offset", "5"]);
+		await program.parseAsync([
+			"node",
+			"ol",
+			"document",
+			"list",
+			"--limit",
+			"10",
+			"--offset",
+			"5",
+		]);
 
 		expect(apiRequest).toHaveBeenCalledWith("documents.list", {
 			limit: 10,
@@ -158,7 +190,9 @@ describe("collection commands", () => {
 			data: [{ id: "c1", name: "Engineering", documentCount: 42 }],
 		});
 
-		const { registerCollectionCommand } = await import("../commands/collection.js");
+		const { registerCollectionCommand } = await import(
+			"../commands/collection.js"
+		);
 		const program = new Command();
 		program.exitOverride();
 		registerCollectionCommand(program);
