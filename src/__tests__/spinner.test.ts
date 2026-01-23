@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { withSpinner, LoadingSpinner } from "../lib/spinner.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LoadingSpinner, withSpinner } from "../lib/spinner.js";
 
 const mockSpinnerInstance = {
 	start: vi.fn().mockReturnThis(),

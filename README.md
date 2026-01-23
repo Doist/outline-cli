@@ -5,7 +5,11 @@ CLI for the [Outline](https://www.getoutline.com) wiki/knowledge base API.
 ## Install
 
 ```sh
-npm install -g outline-cli
+git clone https://github.com/gnapse/outline-cli.git
+cd outline-cli
+npm install
+npm run build
+npm link
 ```
 
 ## Auth
@@ -26,11 +30,13 @@ Self-hosted instances: provide your instance URL during `ol auth login` or set `
 
 ```sh
 # Search
-ol search "query" --limit 10 --collection <id>
+ol search "query" --limit 10 --collection <id> --status published
 
-# Documents
+# Documents (alias: ol doc)
 ol document list --collection <id> --sort updatedAt --direction DESC
-ol document get <urlId>
+ol document get <urlId>              # renders markdown for terminal
+ol document get <urlId> --raw        # outputs raw markdown
+ol document open <urlId>             # opens in browser
 ol document create --title "Title" --collection <id> --file doc.md --publish
 ol document update <urlId> --file updated.md
 ol document delete <urlId> --confirm
@@ -38,7 +44,7 @@ ol document move <urlId> --collection <target-id>
 ol document archive <urlId>
 ol document unarchive <urlId>
 
-# Collections
+# Collections (alias: ol col)
 ol collection list
 ol collection get <id>
 ol collection create --name "Engineering" --color "#4CAF50"

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { outputItem, outputList, getOutputOptions } from "../lib/output.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getOutputOptions, outputItem, outputList } from "../lib/output.js";
 
 describe("output", () => {
 	let logs: string[];
@@ -44,10 +44,12 @@ describe("output", () => {
 	});
 
 	it("getOutputOptions parses flags", () => {
-		expect(getOutputOptions({ json: true, full: true, ndjson: false })).toEqual({
-			json: true,
-			ndjson: false,
-			full: true,
-		});
+		expect(getOutputOptions({ json: true, full: true, ndjson: false })).toEqual(
+			{
+				json: true,
+				ndjson: false,
+				full: true,
+			},
+		);
 	});
 });

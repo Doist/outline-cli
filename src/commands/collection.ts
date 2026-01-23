@@ -1,5 +1,5 @@
-import type { Command } from "commander";
 import chalk from "chalk";
+import type { Command } from "commander";
 import { apiRequest } from "../lib/api.js";
 import { getOutputOptions, outputItem, outputList } from "../lib/output.js";
 
@@ -30,7 +30,10 @@ function formatCollection(col: Collection): string {
 }
 
 export function registerCollectionCommand(program: Command): void {
-	const col = program.command("collection").alias("col").description("Manage collections");
+	const col = program
+		.command("collection")
+		.alias("col")
+		.description("Manage collections");
 
 	col
 		.command("list")
@@ -49,7 +52,13 @@ export function registerCollectionCommand(program: Command): void {
 				},
 			);
 
-			outputList(data, formatCollection, essentialKeys, getOutputOptions(opts), pagination);
+			outputList(
+				data,
+				formatCollection,
+				essentialKeys,
+				getOutputOptions(opts),
+				pagination,
+			);
 		});
 
 	col

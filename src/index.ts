@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { registerAuthCommand } from "./commands/auth.js";
-import { registerSearchCommand } from "./commands/search.js";
-import { registerDocumentCommand } from "./commands/document.js";
 import { registerCollectionCommand } from "./commands/collection.js";
+import { registerDocumentCommand } from "./commands/document.js";
+import { registerSearchCommand } from "./commands/search.js";
 
 const program = new Command();
 

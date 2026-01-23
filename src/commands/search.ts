@@ -1,5 +1,5 @@
-import type { Command } from "commander";
 import chalk from "chalk";
+import type { Command } from "commander";
 import { apiRequest } from "../lib/api.js";
 import { getBaseUrl } from "../lib/auth.js";
 import { getOutputOptions, outputList } from "../lib/output.js";

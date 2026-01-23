@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
 import { readFileSync } from "node:fs";
-import type { Command } from "commander";
 import chalk from "chalk";
+import type { Command } from "commander";
 import { apiRequest } from "../lib/api.js";
 import { getBaseUrl } from "../lib/auth.js";
 import { renderMarkdown } from "../lib/markdown.js";
@@ -51,7 +51,10 @@ function formatDocFull(doc: Document): string {
 	return `# ${doc.title}\n\n${doc.text}`;
 }
 
-function readTextInput(opts: { text?: string; file?: string }): string | undefined {
+function readTextInput(opts: {
+	text?: string;
+	file?: string;
+}): string | undefined {
 	if (opts.file) return readFileSync(opts.file, "utf-8");
 	return opts.text;
 }
@@ -79,7 +82,10 @@ function extractTitleFromText(text: string): { title?: string; body: string } {
 }
 
 export function registerDocumentCommand(program: Command): void {
-	const doc = program.command("document").alias("doc").description("Manage documents");
+	const doc = program
+		.command("document")
+		.alias("doc")
+		.description("Manage documents");
 
 	doc
 		.command("list")
@@ -87,7 +93,11 @@ export function registerDocumentCommand(program: Command): void {
 		.option("--collection <id>", "Filter by collection ID")
 		.option("--limit <n>", "Max results", "25")
 		.option("--offset <n>", "Pagination offset", "0")
-		.option("--sort <field>", "Sort by field (title|updatedAt|createdAt)", "updatedAt")
+		.option(
+			"--sort <field>",
+			"Sort by field (title|updatedAt|createdAt)",
+			"updatedAt",
+		)
 		.option("--direction <dir>", "Sort direction (ASC|DESC)", "DESC")
 		.option("--json", "Output JSON")
 		.option("--ndjson", "Output NDJSON")
@@ -106,7 +116,13 @@ export function registerDocumentCommand(program: Command): void {
 				body,
 			);
 
-			outputList(data, formatDoc, essentialKeys, getOutputOptions(opts), pagination);
+			outputList(
+				data,
+				formatDoc,
+				essentialKeys,
+				getOutputOptions(opts),
+				pagination,
+			);
 		});
 
 	doc
@@ -165,7 +181,10 @@ export function registerDocumentCommand(program: Command): void {
 			if (opts.json) {
 				outputItem(data, formatDoc, essentialKeys, { json: true });
 			} else {
-				console.log(chalk.green(`Created: ${data.title}`), chalk.dim(data.urlId));
+				console.log(
+					chalk.green(`Created: ${data.title}`),
+					chalk.dim(data.urlId),
+				);
 			}
 		});
 
@@ -194,7 +213,10 @@ export function registerDocumentCommand(program: Command): void {
 			if (opts.json) {
 				outputItem(data, formatDoc, essentialKeys, { json: true });
 			} else {
-				console.log(chalk.green(`Updated: ${data.title}`), chalk.dim(data.urlId));
+				console.log(
+					chalk.green(`Updated: ${data.title}`),
+					chalk.dim(data.urlId),
+				);
 			}
 		});
 
