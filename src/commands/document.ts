@@ -1,13 +1,16 @@
+import { exec } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { apiRequest } from "../lib/api.js";
+import { getBaseUrl } from "../lib/auth.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { getOutputOptions, outputItem, outputList } from "../lib/output.js";
 
 interface Document {
 	id: string;
 	title: string;
+	url: string;
 	urlId: string;
 	text: string;
 	collectionId: string;
@@ -51,6 +54,16 @@ function formatDocFull(doc: Document): string {
 function readTextInput(opts: { text?: string; file?: string }): string | undefined {
 	if (opts.file) return readFileSync(opts.file, "utf-8");
 	return opts.text;
+}
+
+function openInBrowser(url: string): void {
+	const cmd =
+		process.platform === "win32"
+			? `start "" "${url}"`
+			: process.platform === "darwin"
+				? `open "${url}"`
+				: `xdg-open "${url}"`;
+	exec(cmd);
 }
 
 function extractTitleFromText(text: string): { title?: string; body: string } {
@@ -114,6 +127,18 @@ export function registerDocumentCommand(program: Command): void {
 				const content = formatDocFull(data);
 				console.log(opts.raw ? content : renderMarkdown(content));
 			}
+		});
+
+	doc
+		.command("open <id>")
+		.description("Open a document in the browser")
+		.action(async (id: string) => {
+			const { data } = await apiRequest<Document>("documents.info", {
+				id: resolveId(id),
+			});
+			const fullUrl = `${getBaseUrl()}${data.url}`;
+			openInBrowser(fullUrl);
+			console.log(chalk.dim(`Opened: ${fullUrl}`));
 		});
 
 	doc
