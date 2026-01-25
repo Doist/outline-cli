@@ -11,7 +11,11 @@ import {
 	outputItem,
 	outputList,
 } from "../lib/output.js";
-import { resolveCollectionId, resolveDocumentId } from "../lib/refs.js";
+import {
+	resolveCollectionId,
+	resolveDocumentId,
+	resolveDocumentRef,
+} from "../lib/refs.js";
 
 interface Document {
 	id: string;
@@ -130,10 +134,17 @@ export function registerDocumentCommand(program: Command): void {
 		.option("--json", "Output JSON")
 		.option("--full", "Include all fields in JSON output")
 		.action(async (id: string, opts) => {
-			const resolvedId = await resolveDocumentId(id);
-			const { data } = await apiRequest<Document>("documents.info", {
-				id: resolvedId,
-			});
+			const resolved = await resolveDocumentRef(id);
+			// If resolved from name search (documents.list), text may be missing
+			let data: Document;
+			if (resolved.text !== undefined) {
+				data = resolved as Document;
+			} else {
+				const response = await apiRequest<Document>("documents.info", {
+					id: resolved.id,
+				});
+				data = response.data;
+			}
 
 			const outputOpts = getOutputOptions(opts);
 			if (outputOpts.json) {
@@ -148,11 +159,8 @@ export function registerDocumentCommand(program: Command): void {
 		.command("open <id>")
 		.description("Open a document in the browser")
 		.action(async (id: string) => {
-			const resolvedId = await resolveDocumentId(id);
-			const { data } = await apiRequest<Document>("documents.info", {
-				id: resolvedId,
-			});
-			const fullUrl = `${getBaseUrl()}${data.url}`;
+			const resolved = await resolveDocumentRef(id);
+			const fullUrl = `${getBaseUrl()}${resolved.url}`;
 			openInBrowser(fullUrl);
 			console.log(chalk.dim(`Opened: ${fullUrl}`));
 		});

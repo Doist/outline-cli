@@ -7,7 +7,7 @@ import {
 	outputItem,
 	outputList,
 } from "../lib/output.js";
-import { resolveCollectionId } from "../lib/refs.js";
+import { resolveCollectionId, resolveCollectionRef } from "../lib/refs.js";
 
 interface Collection {
 	id: string;
@@ -73,10 +73,17 @@ export function registerCollectionCommand(program: Command): void {
 		.option("--json", "Output JSON")
 		.option("--full", "Include all fields in JSON output")
 		.action(async (id: string, opts) => {
-			const resolvedId = await resolveCollectionId(id);
-			const { data } = await apiRequest<Collection>("collections.info", {
-				id: resolvedId,
-			});
+			const resolved = await resolveCollectionRef(id);
+			// If resolved from name search (collections.list), some fields may be missing
+			let data: Collection;
+			if (resolved.documentCount !== undefined) {
+				data = resolved as Collection;
+			} else {
+				const response = await apiRequest<Collection>("collections.info", {
+					id: resolved.id,
+				});
+				data = response.data;
+			}
 			outputItem(data, formatCollection, essentialKeys, getOutputOptions(opts));
 		});
 

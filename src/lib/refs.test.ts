@@ -115,6 +115,42 @@ describe("resolveDocumentRef", () => {
 		);
 	});
 
+	it("shows urlId in ambiguous error suggestions for documents", async () => {
+		const mockDocs = [
+			{ id: "1", title: "Engineering Guide", urlId: "eng-guide-abc" },
+			{ id: "2", title: "Engineering Handbook", urlId: "eng-handbook-xyz" },
+		];
+		mockApiRequest
+			.mockRejectedValueOnce(new Error("Not found"))
+			.mockResolvedValueOnce({ data: mockDocs });
+
+		const { resolveDocumentRef } = await import("./refs.js");
+		try {
+			await resolveDocumentRef("engineering");
+		} catch (error) {
+			const message = (error as Error).message;
+			expect(message).toContain("eng-guide-abc");
+			expect(message).toContain("eng-handbook-xyz");
+			expect(message).not.toContain('"1"'); // should not show internal id
+			return;
+		}
+		expect.fail("Expected error to be thrown");
+	});
+
+	it("treats multiple exact name matches as ambiguous", async () => {
+		const mockDocs = [
+			{ id: "1", title: "Meeting Notes", urlId: "meeting-notes-abc" },
+			{ id: "2", title: "Meeting Notes", urlId: "meeting-notes-xyz" },
+		];
+		// "meeting notes" has spaces, doesn't look like an ID
+		mockApiRequest.mockResolvedValueOnce({ data: mockDocs });
+
+		const { resolveDocumentRef } = await import("./refs.js");
+		await expect(resolveDocumentRef("meeting notes")).rejects.toThrow(
+			/Ambiguous Document reference.*Multiple items have this exact name/,
+		);
+	});
+
 	it("throws not found error when no matches", async () => {
 		const mockDocs = [{ id: "1", title: "Engineering Guide", urlId: "eng-1" }];
 		// "nonexistent" is 11 chars, looks like an ID
@@ -150,6 +186,40 @@ describe("resolveDocumentRef", () => {
 		});
 		expect(mockApiRequest).toHaveBeenNthCalledWith(2, "documents.list", {
 			limit: 100,
+			offset: 0,
+		});
+	});
+
+	it("paginates to fetch all documents when workspace has >100", async () => {
+		// Create 150 mock docs to simulate pagination
+		const page1 = Array.from({ length: 100 }, (_, i) => ({
+			id: `doc-${i}`,
+			title: `Doc ${i}`,
+			urlId: `doc-${i}-abc`,
+		}));
+		const page2 = Array.from({ length: 50 }, (_, i) => ({
+			id: `doc-${100 + i}`,
+			title: `Doc ${100 + i}`,
+			urlId: `doc-${100 + i}-abc`,
+		}));
+
+		mockApiRequest
+			.mockResolvedValueOnce({ data: page1 }) // first page (100 items)
+			.mockResolvedValueOnce({ data: page2 }); // second page (50 items)
+
+		const { resolveDocumentRef } = await import("./refs.js");
+		// Search for a doc that's on page 2
+		const result = await resolveDocumentRef("Doc 125");
+
+		expect(result).toEqual(page2[25]);
+		expect(mockApiRequest).toHaveBeenCalledTimes(2);
+		expect(mockApiRequest).toHaveBeenNthCalledWith(1, "documents.list", {
+			limit: 100,
+			offset: 0,
+		});
+		expect(mockApiRequest).toHaveBeenNthCalledWith(2, "documents.list", {
+			limit: 100,
+			offset: 100,
 		});
 	});
 });
