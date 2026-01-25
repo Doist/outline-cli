@@ -9,6 +9,7 @@ import {
 	getTokenSource,
 	saveConfig,
 } from "../lib/auth.js";
+import { formatError } from "../lib/output.js";
 
 interface TeamInfo {
 	name: string;
@@ -59,7 +60,12 @@ export function registerAuthCommand(program: Command): void {
 		.action(async () => {
 			const token = await promptSecret("API token: ");
 			if (!token.trim()) {
-				console.error(chalk.red("Token is required."));
+				console.error(
+					formatError("AUTH_TOKEN_REQUIRED", "API token is required.", [
+						"Enter your API token from Outline settings",
+						"Find it at Settings → API Tokens",
+					]),
+				);
 				process.exit(1);
 			}
 
@@ -104,8 +110,15 @@ export function registerAuthCommand(program: Command): void {
 				console.log(`User: ${data.user.name} (${data.user.email})`);
 			} catch (err) {
 				console.error(
-					chalk.red("Could not fetch auth info:"),
-					(err as Error).message,
+					formatError(
+						"AUTH_VERIFICATION_FAILED",
+						`Could not fetch auth info: ${(err as Error).message}`,
+						[
+							"Check that your API token is valid",
+							"Verify the base URL is correct",
+							"Run 'ol auth login' to re-authenticate",
+						],
+					),
 				);
 				process.exit(1);
 			}
