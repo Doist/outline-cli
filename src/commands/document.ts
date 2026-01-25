@@ -11,6 +11,11 @@ import {
 	outputItem,
 	outputList,
 } from "../lib/output.js";
+import {
+	resolveCollectionId,
+	resolveDocumentId,
+	resolveDocumentRef,
+} from "../lib/refs.js";
 
 interface Document {
 	id: string;
@@ -34,16 +39,6 @@ const essentialKeys: (keyof Document)[] = [
 	"collectionId",
 	"updatedAt",
 ];
-
-function resolveId(input: string): string {
-	// If it looks like a URL, extract the slug suffix
-	const parts = input.replace(/\/$/, "").split("/");
-	const last = parts[parts.length - 1];
-	// Outline URL IDs are the part after the last hyphen in the slug
-	const match = last.match(/-([a-zA-Z0-9]+)$/);
-	if (match) return match[1];
-	return input;
-}
 
 function formatDoc(doc: Document): string {
 	const title = chalk.bold(doc.title);
@@ -95,7 +90,7 @@ export function registerDocumentCommand(program: Command): void {
 	doc
 		.command("list")
 		.description("List documents")
-		.option("--collection <id>", "Filter by collection ID")
+		.option("--collection <ref>", "Filter by collection ID or name")
 		.option("--limit <n>", "Max results", "25")
 		.option("--offset <n>", "Pagination offset", "0")
 		.option(
@@ -114,7 +109,9 @@ export function registerDocumentCommand(program: Command): void {
 				sort: opts.sort,
 				direction: opts.direction,
 			};
-			if (opts.collection) body.collectionId = opts.collection;
+			if (opts.collection) {
+				body.collectionId = await resolveCollectionId(opts.collection);
+			}
 
 			const { data, pagination } = await apiRequest<Document[]>(
 				"documents.list",
@@ -132,14 +129,22 @@ export function registerDocumentCommand(program: Command): void {
 
 	doc
 		.command("get <id>")
-		.description("Get a document by URL ID or ID")
+		.description("Get a document by ID, URL, or name")
 		.option("--raw", "Output raw markdown without terminal formatting")
 		.option("--json", "Output JSON")
 		.option("--full", "Include all fields in JSON output")
 		.action(async (id: string, opts) => {
-			const { data } = await apiRequest<Document>("documents.info", {
-				id: resolveId(id),
-			});
+			const resolved = await resolveDocumentRef(id);
+			// If resolved from name search (documents.list), text may be missing
+			let data: Document;
+			if (resolved.text !== undefined) {
+				data = resolved as Document;
+			} else {
+				const response = await apiRequest<Document>("documents.info", {
+					id: resolved.id,
+				});
+				data = response.data;
+			}
 
 			const outputOpts = getOutputOptions(opts);
 			if (outputOpts.json) {
@@ -154,10 +159,8 @@ export function registerDocumentCommand(program: Command): void {
 		.command("open <id>")
 		.description("Open a document in the browser")
 		.action(async (id: string) => {
-			const { data } = await apiRequest<Document>("documents.info", {
-				id: resolveId(id),
-			});
-			const fullUrl = `${getBaseUrl()}${data.url}`;
+			const resolved = await resolveDocumentRef(id);
+			const fullUrl = `${getBaseUrl()}${resolved.url}`;
 			openInBrowser(fullUrl);
 			console.log(chalk.dim(`Opened: ${fullUrl}`));
 		});
@@ -166,15 +169,16 @@ export function registerDocumentCommand(program: Command): void {
 		.command("create")
 		.description("Create a document")
 		.requiredOption("--title <title>", "Document title")
-		.requiredOption("--collection <id>", "Collection ID")
+		.requiredOption("--collection <ref>", "Collection ID or name")
 		.option("--text <text>", "Document body (markdown)")
 		.option("--file <path>", "Read markdown from file")
 		.option("--publish", "Publish immediately")
 		.option("--json", "Output JSON")
 		.action(async (opts) => {
+			const collectionId = await resolveCollectionId(opts.collection);
 			const body: Record<string, unknown> = {
 				title: opts.title,
-				collectionId: opts.collection,
+				collectionId,
 			};
 
 			const text = readTextInput(opts);
@@ -201,7 +205,8 @@ export function registerDocumentCommand(program: Command): void {
 		.option("--file <path>", "Read markdown from file")
 		.option("--json", "Output JSON")
 		.action(async (id: string, opts) => {
-			const body: Record<string, unknown> = { id: resolveId(id) };
+			const resolvedId = await resolveDocumentId(id);
+			const body: Record<string, unknown> = { id: resolvedId };
 
 			const rawText = readTextInput(opts);
 			if (rawText && !opts.title) {
@@ -240,18 +245,21 @@ export function registerDocumentCommand(program: Command): void {
 				);
 				process.exit(1);
 			}
-			await apiRequest("documents.delete", { id: resolveId(id) });
+			const resolvedId = await resolveDocumentId(id);
+			await apiRequest("documents.delete", { id: resolvedId });
 			console.log("Deleted.");
 		});
 
 	doc
 		.command("move <id>")
 		.description("Move a document to another collection")
-		.requiredOption("--collection <id>", "Target collection ID")
+		.requiredOption("--collection <ref>", "Target collection ID or name")
 		.action(async (id: string, opts) => {
+			const resolvedId = await resolveDocumentId(id);
+			const collectionId = await resolveCollectionId(opts.collection);
 			await apiRequest("documents.move", {
-				id: resolveId(id),
-				collectionId: opts.collection,
+				id: resolvedId,
+				collectionId,
 			});
 			console.log("Moved.");
 		});
@@ -260,7 +268,8 @@ export function registerDocumentCommand(program: Command): void {
 		.command("archive <id>")
 		.description("Archive a document")
 		.action(async (id: string) => {
-			await apiRequest("documents.archive", { id: resolveId(id) });
+			const resolvedId = await resolveDocumentId(id);
+			await apiRequest("documents.archive", { id: resolvedId });
 			console.log("Archived.");
 		});
 
@@ -268,7 +277,8 @@ export function registerDocumentCommand(program: Command): void {
 		.command("unarchive <id>")
 		.description("Unarchive a document")
 		.action(async (id: string) => {
-			await apiRequest("documents.unarchive", { id: resolveId(id) });
+			const resolvedId = await resolveDocumentId(id);
+			await apiRequest("documents.unarchive", { id: resolvedId });
 			console.log("Unarchived.");
 		});
 }
