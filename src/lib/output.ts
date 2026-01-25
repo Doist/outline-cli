@@ -74,3 +74,18 @@ function pick<T extends object>(obj: T, keys: (keyof T)[]): Partial<T> {
 	}
 	return result;
 }
+
+export function formatError(
+	code: string,
+	message: string,
+	hints?: string[],
+): string {
+	const lines = [`Error: ${code}`, message];
+	if (hints && hints.length > 0) {
+		lines.push("");
+		for (const hint of hints) {
+			lines.push(`  - ${hint}`);
+		}
+	}
+	return chalk.red(lines.join("\n"));
+}

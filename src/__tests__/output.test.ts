@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getOutputOptions, outputItem, outputList } from "../lib/output.js";
+import {
+	formatError,
+	getOutputOptions,
+	outputItem,
+	outputList,
+} from "../lib/output.js";
 
 describe("output", () => {
 	let logs: string[];
@@ -51,5 +56,38 @@ describe("output", () => {
 				full: true,
 			},
 		);
+	});
+
+	describe("formatError", () => {
+		it("formats error with code and message", () => {
+			const result = formatError("TEST_ERROR", "Something went wrong");
+			expect(result).toContain("Error: TEST_ERROR");
+			expect(result).toContain("Something went wrong");
+		});
+
+		it("formats error with hints", () => {
+			const result = formatError("TEST_ERROR", "Something went wrong", [
+				"Try this",
+				"Or try that",
+			]);
+			expect(result).toContain("Error: TEST_ERROR");
+			expect(result).toContain("Something went wrong");
+			expect(result).toContain("  - Try this");
+			expect(result).toContain("  - Or try that");
+		});
+
+		it("formats error with empty hints array", () => {
+			const result = formatError("TEST_ERROR", "Something went wrong", []);
+			expect(result).toContain("Error: TEST_ERROR");
+			expect(result).toContain("Something went wrong");
+			expect(result).not.toContain("  - ");
+		});
+
+		it("formats error without hints", () => {
+			const result = formatError("NO_HINTS", "No hints provided");
+			expect(result).toContain("Error: NO_HINTS");
+			expect(result).toContain("No hints provided");
+			expect(result).not.toContain("  - ");
+		});
 	});
 });

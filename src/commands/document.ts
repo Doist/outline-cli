@@ -5,7 +5,12 @@ import type { Command } from "commander";
 import { apiRequest } from "../lib/api.js";
 import { getBaseUrl } from "../lib/auth.js";
 import { renderMarkdown } from "../lib/markdown.js";
-import { getOutputOptions, outputItem, outputList } from "../lib/output.js";
+import {
+	formatError,
+	getOutputOptions,
+	outputItem,
+	outputList,
+} from "../lib/output.js";
 
 interface Document {
 	id: string;
@@ -226,7 +231,13 @@ export function registerDocumentCommand(program: Command): void {
 		.option("--confirm", "Skip confirmation")
 		.action(async (id: string, opts) => {
 			if (!opts.confirm) {
-				console.error(chalk.red("Use --confirm to delete."));
+				console.error(
+					formatError(
+						"CONFIRMATION_REQUIRED",
+						"Delete operation requires confirmation.",
+						["Use --confirm flag to proceed with deletion"],
+					),
+				);
 				process.exit(1);
 			}
 			await apiRequest("documents.delete", { id: resolveId(id) });

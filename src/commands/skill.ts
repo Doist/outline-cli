@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import type { Command } from "commander";
+import { formatError } from "../lib/output.js";
 import {
 	getInstaller,
 	listAgents,
@@ -26,8 +27,10 @@ export function registerSkillCommand(program: Command): void {
 			if (!installer) {
 				const available = listAgents().join(", ");
 				console.error(
-					chalk.red(`Unknown agent: ${agent}`),
-					chalk.dim(`\nAvailable: ${available}`),
+					formatError("UNKNOWN_AGENT", `Unknown agent: ${agent}`, [
+						`Available agents: ${available}`,
+						"Run 'ol skill list' to see all agents",
+					]),
 				);
 				process.exit(1);
 			}
@@ -56,8 +59,10 @@ export function registerSkillCommand(program: Command): void {
 			if (!installer) {
 				const available = listAgents().join(", ");
 				console.error(
-					chalk.red(`Unknown agent: ${agent}`),
-					chalk.dim(`\nAvailable: ${available}`),
+					formatError("UNKNOWN_AGENT", `Unknown agent: ${agent}`, [
+						`Available agents: ${available}`,
+						"Run 'ol skill list' to see all agents",
+					]),
 				);
 				process.exit(1);
 			}
