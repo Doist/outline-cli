@@ -7,6 +7,7 @@ import {
 	outputItem,
 	outputList,
 } from "../lib/output.js";
+import { resolveCollectionId } from "../lib/refs.js";
 
 interface Collection {
 	id: string;
@@ -68,11 +69,14 @@ export function registerCollectionCommand(program: Command): void {
 
 	col
 		.command("get <id>")
-		.description("Get collection details")
+		.description("Get collection details by ID or name")
 		.option("--json", "Output JSON")
 		.option("--full", "Include all fields in JSON output")
 		.action(async (id: string, opts) => {
-			const { data } = await apiRequest<Collection>("collections.info", { id });
+			const resolvedId = await resolveCollectionId(id);
+			const { data } = await apiRequest<Collection>("collections.info", {
+				id: resolvedId,
+			});
 			outputItem(data, formatCollection, essentialKeys, getOutputOptions(opts));
 		});
 
@@ -107,7 +111,8 @@ export function registerCollectionCommand(program: Command): void {
 		.option("--color <hex>", "New color")
 		.option("--json", "Output JSON")
 		.action(async (id: string, opts) => {
-			const body: Record<string, unknown> = { id };
+			const resolvedId = await resolveCollectionId(id);
+			const body: Record<string, unknown> = { id: resolvedId };
 			if (opts.name) body.name = opts.name;
 			if (opts.description) body.description = opts.description;
 			if (opts.color) body.color = opts.color;
@@ -136,7 +141,8 @@ export function registerCollectionCommand(program: Command): void {
 				);
 				process.exit(1);
 			}
-			await apiRequest("collections.delete", { id });
+			const resolvedId = await resolveCollectionId(id);
+			await apiRequest("collections.delete", { id: resolvedId });
 			console.log("Deleted.");
 		});
 }
