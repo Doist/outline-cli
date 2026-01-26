@@ -1,7 +1,7 @@
-import { exec } from "node:child_process";
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
 import type { Command } from "commander";
+import open from "open";
 import { apiRequest } from "../lib/api.js";
 import { getBaseUrl } from "../lib/auth.js";
 import { renderMarkdown } from "../lib/markdown.js";
@@ -57,16 +57,6 @@ function readTextInput(opts: {
 }): string | undefined {
 	if (opts.file) return readFileSync(opts.file, "utf-8");
 	return opts.text;
-}
-
-function openInBrowser(url: string): void {
-	const cmd =
-		process.platform === "win32"
-			? `start "" "${url}"`
-			: process.platform === "darwin"
-				? `open "${url}"`
-				: `xdg-open "${url}"`;
-	exec(cmd);
 }
 
 function extractTitleFromText(text: string): { title?: string; body: string } {
@@ -161,7 +151,7 @@ export function registerDocumentCommand(program: Command): void {
 		.action(async (id: string) => {
 			const resolved = await resolveDocumentRef(id);
 			const fullUrl = `${getBaseUrl()}${resolved.url}`;
-			openInBrowser(fullUrl);
+			await open(fullUrl);
 			console.log(chalk.dim(`Opened: ${fullUrl}`));
 		});
 
