@@ -47,6 +47,18 @@ export async function startOAuthCallbackServer(
 			return;
 		}
 
+		// Check for OAuth error response first
+		const error = url.searchParams.get("error");
+		if (error) {
+			const errorDescription =
+				url.searchParams.get("error_description") || error;
+			res.writeHead(400);
+			res.end(`Authorization failed: ${errorDescription}`);
+			rejectCode(new Error(`OAuth authorization denied: ${errorDescription}`));
+			resolved = true;
+			return;
+		}
+
 		const code = url.searchParams.get("code");
 		const returnedState = url.searchParams.get("state");
 
@@ -75,6 +87,8 @@ export async function startOAuthCallbackServer(
 	});
 
 	server.on("error", (err) => {
+		if (resolved) return;
+		resolved = true;
 		rejectCode(err as Error);
 	});
 
