@@ -11,6 +11,7 @@ import { join } from "node:path";
 interface Config {
 	api_token?: string;
 	base_url?: string;
+	oauth_client_id?: string;
 }
 
 const CONFIG_DIR = join(homedir(), ".config", "outline-cli");
@@ -48,6 +49,14 @@ export function getBaseUrl(): string {
 	return DEFAULT_BASE_URL;
 }
 
+export function getOAuthClientId(): string | undefined {
+	const envClientId = process.env.OUTLINE_OAUTH_CLIENT_ID;
+	if (envClientId) return envClientId;
+
+	const config = readConfig();
+	return config.oauth_client_id;
+}
+
 export function getTokenSource(): "env" | "config" | null {
 	if (process.env.OUTLINE_API_TOKEN) return "env";
 	const config = readConfig();
@@ -55,7 +64,11 @@ export function getTokenSource(): "env" | "config" | null {
 	return null;
 }
 
-export function saveConfig(token: string, baseUrl?: string): void {
+export function saveConfig(
+	token: string,
+	baseUrl?: string,
+	oauthClientId?: string,
+): void {
 	mkdirSync(CONFIG_DIR, { recursive: true });
 	const existing = readConfig();
 	const config: Config = {
@@ -64,6 +77,9 @@ export function saveConfig(token: string, baseUrl?: string): void {
 	};
 	if (baseUrl) {
 		config.base_url = baseUrl.replace(/\/$/, "");
+	}
+	if (oauthClientId) {
+		config.oauth_client_id = oauthClientId;
 	}
 	writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
 }

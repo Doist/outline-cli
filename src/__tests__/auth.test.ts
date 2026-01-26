@@ -20,6 +20,7 @@ describe("auth", () => {
 		mkdirSync(TEST_CONFIG_DIR, { recursive: true });
 		delete process.env.OUTLINE_API_TOKEN;
 		delete process.env.OUTLINE_URL;
+		delete process.env.OUTLINE_OAUTH_CLIENT_ID;
 	});
 
 	afterEach(() => {
@@ -67,12 +68,27 @@ describe("auth", () => {
 	});
 
 	it("saveConfig and clearConfig work", async () => {
-		const { saveConfig, clearConfig, getApiToken } = await import(
-			"../lib/auth.js"
-		);
-		saveConfig("test-token", "https://wiki.test.com");
+		const { saveConfig, clearConfig, getApiToken, getOAuthClientId } =
+			await import("../lib/auth.js");
+		saveConfig("test-token", "https://wiki.test.com", "client-id");
 		expect(getApiToken()).toBe("test-token");
+		expect(getOAuthClientId()).toBe("client-id");
 		clearConfig();
 		expect(() => getApiToken()).toThrow();
+	});
+
+	it("getOAuthClientId returns env var first", async () => {
+		process.env.OUTLINE_OAUTH_CLIENT_ID = "env-client-id";
+		const { getOAuthClientId } = await import("../lib/auth.js");
+		expect(getOAuthClientId()).toBe("env-client-id");
+	});
+
+	it("getOAuthClientId reads from config file", async () => {
+		writeFileSync(
+			TEST_CONFIG_PATH,
+			JSON.stringify({ oauth_client_id: "file-client-id" }),
+		);
+		const { getOAuthClientId } = await import("../lib/auth.js");
+		expect(getOAuthClientId()).toBe("file-client-id");
 	});
 });

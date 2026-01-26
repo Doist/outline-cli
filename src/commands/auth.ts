@@ -1,15 +1,23 @@
 import { createInterface } from "node:readline/promises";
-import { Writable } from "node:stream";
 import chalk from "chalk";
 import type { Command } from "commander";
+import open from "open";
 import { apiRequest } from "../lib/api.js";
 import {
 	clearConfig,
 	getBaseUrl,
+	getOAuthClientId,
 	getTokenSource,
 	saveConfig,
 } from "../lib/auth.js";
+import { buildAuthorizationUrl, exchangeCodeForToken } from "../lib/oauth.js";
+import { startOAuthCallbackServer } from "../lib/oauth-server.js";
 import { formatError } from "../lib/output.js";
+import {
+	generateCodeChallenge,
+	generateCodeVerifier,
+	generateState,
+} from "../lib/pkce.js";
 
 interface TeamInfo {
 	name: string;
@@ -30,53 +38,96 @@ async function prompt(question: string): Promise<string> {
 	}
 }
 
-async function promptSecret(question: string): Promise<string> {
-	process.stdout.write(question);
-	const mutedOutput = new Writable({
-		write(_, __, cb) {
-			cb();
-		},
-	});
-	const rl = createInterface({
-		input: process.stdin,
-		output: mutedOutput,
-		terminal: true,
-	});
-	try {
-		const answer = await rl.question("");
-		process.stdout.write("\n");
-		return answer;
-	} finally {
-		rl.close();
-	}
-}
-
 export function registerAuthCommand(program: Command): void {
 	const auth = program.command("auth").description("Manage authentication");
 
 	auth
 		.command("login")
 		.description("Authenticate with an Outline instance")
-		.action(async () => {
-			const token = await promptSecret("API token: ");
-			if (!token.trim()) {
+		.option("--token <token>", "Authenticate using a personal API token")
+		.action(async (options: { token?: string }) => {
+			const configuredBaseUrl = getBaseUrl();
+			const baseUrlInput = await prompt(
+				`Base URL (default: ${configuredBaseUrl}): `,
+			);
+			const url = (baseUrlInput.trim() || configuredBaseUrl).replace(/\/$/, "");
+
+			if (options.token) {
+				saveConfig(options.token.trim(), url);
+				try {
+					const { data } = await apiRequest<AuthInfoResponse>("auth.info");
+					console.log(
+						chalk.green(
+							`Authenticated to ${data.team.name} as ${data.user.name}`,
+						),
+					);
+				} catch (err) {
+					console.log(
+						chalk.yellow("Token saved, but could not verify:"),
+						(err as Error).message,
+					);
+				}
+				return;
+			}
+
+			const existingClientId = getOAuthClientId();
+			const clientIdPrompt = existingClientId
+				? `OAuth Client ID (default: ${existingClientId}): `
+				: "OAuth Client ID: ";
+			const clientIdInput = await prompt(clientIdPrompt);
+			const clientId = clientIdInput.trim() || existingClientId;
+
+			if (!clientId) {
 				console.error(
-					formatError("AUTH_TOKEN_REQUIRED", "API token is required.", [
-						"Enter your API token from Outline settings",
-						"Find it at Settings → API Tokens",
-					]),
+					formatError(
+						"OAUTH_CLIENT_ID_REQUIRED",
+						"OAuth client ID is required.",
+						[
+							"Create a public OAuth app in Outline settings",
+							"Set OUTLINE_OAUTH_CLIENT_ID or enter it here",
+						],
+					),
 				);
 				process.exit(1);
 			}
 
-			const baseUrl = await prompt(
-				`Base URL (default: https://app.getoutline.com): `,
-			);
-			const url = baseUrl.trim() || undefined;
+			const codeVerifier = generateCodeVerifier();
+			const codeChallenge = generateCodeChallenge(codeVerifier);
+			const state = generateState();
 
-			saveConfig(token.trim(), url);
+			const callbackServer = await startOAuthCallbackServer({ state });
+			const authorizationUrl = buildAuthorizationUrl({
+				baseUrl: url,
+				clientId,
+				redirectUri: callbackServer.redirectUri,
+				codeChallenge,
+				state,
+			});
 
 			try {
+				await open(authorizationUrl);
+			} catch (err) {
+				console.log(
+					chalk.yellow("Could not open browser automatically."),
+					chalk.dim(authorizationUrl),
+				);
+				console.log(chalk.dim((err as Error).message));
+			}
+
+			console.log(chalk.dim("Waiting for OAuth authorization..."));
+
+			try {
+				const code = await callbackServer.waitForCode;
+				const token = await exchangeCodeForToken({
+					baseUrl: url,
+					clientId,
+					redirectUri: callbackServer.redirectUri,
+					codeVerifier,
+					code,
+				});
+
+				saveConfig(token, url, clientId);
+
 				const { data } = await apiRequest<AuthInfoResponse>("auth.info");
 				console.log(
 					chalk.green(
@@ -84,10 +135,18 @@ export function registerAuthCommand(program: Command): void {
 					),
 				);
 			} catch (err) {
-				console.log(
-					chalk.yellow("Token saved, but could not verify:"),
-					(err as Error).message,
+				callbackServer.close();
+				console.error(
+					formatError(
+						"OAUTH_LOGIN_FAILED",
+						`OAuth login failed: ${(err as Error).message}`,
+						[
+							"Confirm the OAuth app redirect URI matches the CLI callback",
+							"Re-run with 'ol auth login --token' for manual auth",
+						],
+					),
 				);
+				process.exit(1);
 			}
 		});
 
