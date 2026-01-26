@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -184,6 +187,46 @@ describe("document commands", () => {
 			expect(logs.length).toBe(2);
 			expect(JSON.parse(logs[0]).title).toBe("Test Document");
 			expect(JSON.parse(logs[1]).title).toBe("Second");
+		});
+
+		it("passes collection filter to API", async () => {
+			apiRequest
+				.mockResolvedValueOnce({
+					data: [{ id: COL_ID, name: "Test Collection" }],
+				})
+				.mockResolvedValueOnce({
+					data: [],
+					pagination: { offset: 0, limit: 25 },
+				});
+
+			const { registerDocumentCommand } = await import(
+				"../commands/document.js"
+			);
+			const program = new Command();
+			program.exitOverride();
+			registerDocumentCommand(program);
+
+			await program.parseAsync([
+				"node",
+				"ol",
+				"document",
+				"list",
+				"--collection",
+				"Test Collection",
+			]);
+
+			expect(apiRequest).toHaveBeenNthCalledWith(
+				1,
+				"collections.list",
+				{ limit: 100, offset: 0 },
+			);
+			expect(apiRequest).toHaveBeenNthCalledWith(2, "documents.list", {
+				limit: 25,
+				offset: 0,
+				sort: "updatedAt",
+				direction: "DESC",
+				collectionId: COL_ID,
+			});
 		});
 	});
 
@@ -424,6 +467,46 @@ describe("document commands", () => {
 			const parsed = JSON.parse(logs[0]);
 			expect(parsed.title).toBe("Test Document");
 		});
+
+		it("creates document from file contents", async () => {
+			const dir = mkdtempSync(join(tmpdir(), "ol-doc-create-"));
+			const filePath = join(dir, "doc.md");
+			writeFileSync(filePath, "# File Title\n\nFrom file.");
+
+			apiRequest
+				.mockResolvedValueOnce({
+					data: { id: COL_ID, name: "Test Collection" },
+				})
+				.mockResolvedValueOnce({ data: mockDocument });
+
+			const { registerDocumentCommand } = await import(
+				"../commands/document.js"
+			);
+			const program = new Command();
+			program.exitOverride();
+			registerDocumentCommand(program);
+
+			await program.parseAsync([
+				"node",
+				"ol",
+				"document",
+				"create",
+				"--title",
+				"New Doc",
+				"--collection",
+				COL_ID,
+				"--file",
+				filePath,
+			]);
+
+			expect(apiRequest).toHaveBeenLastCalledWith("documents.create", {
+				title: "New Doc",
+				collectionId: COL_ID,
+				text: "# File Title\n\nFrom file.",
+			});
+
+			rmSync(dir, { recursive: true, force: true });
+		});
 	});
 
 	describe("document update", () => {
@@ -511,6 +594,41 @@ describe("document commands", () => {
 				title: "My Title",
 				text: "Body content",
 			});
+		});
+
+		it("updates document from file and extracts title", async () => {
+			const dir = mkdtempSync(join(tmpdir(), "ol-doc-update-"));
+			const filePath = join(dir, "doc.md");
+			writeFileSync(filePath, "# File Heading\n\nFile body");
+
+			apiRequest.mockResolvedValue({
+				data: mockDocument,
+			});
+
+			const { registerDocumentCommand } = await import(
+				"../commands/document.js"
+			);
+			const program = new Command();
+			program.exitOverride();
+			registerDocumentCommand(program);
+
+			await program.parseAsync([
+				"node",
+				"ol",
+				"document",
+				"update",
+				DOC_ID,
+				"--file",
+				filePath,
+			]);
+
+			expect(apiRequest).toHaveBeenCalledWith("documents.update", {
+				id: DOC_ID,
+				title: "File Heading",
+				text: "File body",
+			});
+
+			rmSync(dir, { recursive: true, force: true });
 		});
 	});
 
