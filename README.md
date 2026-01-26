@@ -14,11 +14,33 @@ npm link
 
 ## Auth
 
+### OAuth login (recommended)
+
 ```sh
-ol auth login     # prompts for API token and base URL
+ol auth login     # opens browser for OAuth authorization
 ol auth status    # show current auth state
 ol auth logout    # clear saved credentials
 ```
+
+**Setup:**
+
+1. Create a public OAuth app in Outline (Settings → Applications)
+2. Set the redirect URI to `http://localhost` (any port is fine)
+3. Run `ol auth login` and enter your OAuth client ID when prompted
+
+The client ID is saved for future logins. You can also set `OUTLINE_OAUTH_CLIENT_ID` env var.
+
+### Manual token login
+
+If you prefer using an API token directly:
+
+```sh
+ol auth login --token <your-api-token>
+```
+
+Generate a token in Outline under Settings → API Tokens.
+
+### Configuration
 
 Token resolution: `OUTLINE_API_TOKEN` env var → `~/.config/outline-cli/config.json`.
 
