@@ -94,11 +94,8 @@ export function registerAuthCommand(program: Command): void {
 				let clientId = optionClientId || existingClientId;
 
 				if (!clientId) {
-					const clientIdPrompt = existingClientId
-						? `OAuth Client ID (default: ${existingClientId}): `
-						: "OAuth Client ID: ";
-					const clientIdInput = await prompt(clientIdPrompt);
-					clientId = clientIdInput.trim() || existingClientId;
+					const clientIdInput = await prompt("OAuth Client ID: ");
+					clientId = clientIdInput.trim();
 				}
 
 				if (!clientId) {
