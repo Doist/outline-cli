@@ -32,7 +32,7 @@ if (isCI) {
 
 try {
 	execSync("lefthook install", { stdio: "inherit", cwd: projectRoot });
-} catch (error) {
+} catch {
 	console.warn("Warning: Failed to install git hooks (lefthook)");
 	console.warn(
 		'This is optional for development. You can run "npm run prepare" manually later.',
