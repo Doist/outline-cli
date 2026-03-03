@@ -26,6 +26,8 @@ npm link
 
 ```sh
 ol auth login     # opens browser for OAuth authorization
+ol auth login --base-url <your-outline-url> # skip base URL prompt for this login
+ol auth login --client-id <your-client-id>  # skip prompt for this login
 ol auth status    # show current auth state
 ol auth logout    # clear saved credentials
 ```
@@ -35,8 +37,12 @@ ol auth logout    # clear saved credentials
 1. Create a public OAuth app in Outline (Settings → Applications)
 2. Set the redirect URI to `http://localhost` (any port is fine)
 3. Run `ol auth login` and enter your OAuth client ID when prompted
+   (or pass it directly with `--client-id <your-client-id>`)
+4. If needed, pass `--base-url <your-outline-url>` or set `OUTLINE_URL`
+   (for self-hosted instances or non-default URLs)
 
-The client ID is saved for future logins. You can also set `OUTLINE_OAUTH_CLIENT_ID` env var.
+The client ID is saved for future logins. You can also set `OUTLINE_OAUTH_CLIENT_ID`
+for your local environment.
 
 ### Manual token login
 
@@ -54,7 +60,7 @@ Token resolution: `OUTLINE_API_TOKEN` env var → `~/.config/outline-cli/config.
 
 Base URL resolution: `OUTLINE_URL` env var → config file → `https://app.getoutline.com`.
 
-Self-hosted instances: provide your instance URL during `ol auth login` or set `OUTLINE_URL`.
+Self-hosted instances: pass `--base-url` or set `OUTLINE_URL` (you can still provide it interactively).
 
 ## Commands
 
