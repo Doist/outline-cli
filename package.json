@@ -13,7 +13,7 @@
 		"format": "biome check --write",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"prepare": "lefthook install"
+		"prepare": "node scripts/prepare.js"
 	},
 	"keywords": [
 		"outline",

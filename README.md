@@ -4,8 +4,16 @@ CLI for the [Outline](https://www.getoutline.com) wiki/knowledge base API.
 
 ## Install
 
+### From GitHub (recommended)
+
 ```sh
-git clone https://github.com/gnapse/outline-cli.git
+npm install -g github:Doist/outline-cli
+```
+
+### From source
+
+```sh
+git clone https://github.com/Doist/outline-cli.git
 cd outline-cli
 npm install
 npm run build
