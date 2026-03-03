@@ -18,7 +18,7 @@ const projectRoot = join(__dirname, "..");
 const isGitRepo = existsSync(join(projectRoot, ".git"));
 
 // Skip in CI environments
-const isCI = process.env.CI === "true";
+const isCI = !!process.env.CI;
 
 if (!isGitRepo) {
 	console.log("Skipping git hooks setup (not a git repository)");
