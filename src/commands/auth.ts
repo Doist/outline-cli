@@ -11,7 +11,10 @@ import {
 	saveConfig,
 } from "../lib/auth.js";
 import { buildAuthorizationUrl, exchangeCodeForToken } from "../lib/oauth.js";
-import { startOAuthCallbackServer } from "../lib/oauth-server.js";
+import {
+	DEFAULT_OAUTH_CALLBACK_PORT,
+	startOAuthCallbackServer,
+} from "../lib/oauth-server.js";
 import { formatError } from "../lib/output.js";
 import {
 	generateCodeChallenge,
@@ -117,7 +120,32 @@ export function registerAuthCommand(program: Command): void {
 				const codeChallenge = generateCodeChallenge(codeVerifier);
 				const state = generateState();
 
-				const callbackServer = await startOAuthCallbackServer({ state });
+				let callbackServer: Awaited<
+					ReturnType<typeof startOAuthCallbackServer>
+				>;
+				try {
+					callbackServer = await startOAuthCallbackServer({ state });
+				} catch (err) {
+					const error = err as NodeJS.ErrnoException;
+					const hints = [
+						`Ensure http://localhost:${DEFAULT_OAUTH_CALLBACK_PORT}/callback is reachable from your browser`,
+						"Re-run with 'ol auth login --token <token>' for manual auth",
+					];
+					if (error.code === "EADDRINUSE") {
+						hints.unshift(
+							`Port ${DEFAULT_OAUTH_CALLBACK_PORT} is already in use. Close the other process using it.`,
+						);
+					}
+
+					console.error(
+						formatError(
+							"OAUTH_CALLBACK_SERVER_FAILED",
+							`Could not start local OAuth callback server: ${error.message}`,
+							hints,
+						),
+					);
+					process.exit(1);
+				}
 				const authorizationUrl = buildAuthorizationUrl({
 					baseUrl: url,
 					clientId,

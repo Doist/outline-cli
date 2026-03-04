@@ -6,6 +6,7 @@ describe("oauth callback server", () => {
 		const callbackServer = await startOAuthCallbackServer({
 			state: "expected-state",
 			timeoutMs: 10_000,
+			port: 0,
 		});
 
 		const response = await fetch(
@@ -22,6 +23,7 @@ describe("oauth callback server", () => {
 		const callbackServer = await startOAuthCallbackServer({
 			state: "expected-state",
 			timeoutMs: 10_000,
+			port: 0,
 		});
 		const rejection = callbackServer.waitForCode.then(
 			() => new Error("Expected OAuth state mismatch."),
@@ -43,6 +45,7 @@ describe("oauth callback server", () => {
 		const callbackServer = await startOAuthCallbackServer({
 			state: "expected-state",
 			timeoutMs: 10_000,
+			port: 0,
 		});
 		const rejection = callbackServer.waitForCode.then(
 			() => new Error("Expected OAuth provider error."),

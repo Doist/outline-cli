@@ -35,7 +35,7 @@ ol auth logout    # clear saved credentials
 **Setup:**
 
 1. Create a public OAuth app in Outline (Settings → Applications)
-2. Set the redirect URI to `http://localhost` (any port is fine)
+2. Set the redirect URI to `http://localhost:54969/callback`
 3. Run `ol auth login` and enter your OAuth client ID when prompted
    (or pass it directly with `--client-id <your-client-id>`)
 4. If needed, pass `--base-url <your-outline-url>` or set `OUTLINE_URL`

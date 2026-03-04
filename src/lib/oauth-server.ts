@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 interface OAuthServerOptions {
 	state: string;
 	timeoutMs?: number;
+	port?: number;
 }
 
 export interface OAuthCallbackServer {
@@ -12,6 +13,8 @@ export interface OAuthCallbackServer {
 	waitForCode: Promise<string>;
 	close: () => void;
 }
+
+export const DEFAULT_OAUTH_CALLBACK_PORT = 54969;
 
 function escapeHtml(text: string): string {
 	return text
@@ -128,7 +131,11 @@ function renderErrorPage(message: string): string {
 export async function startOAuthCallbackServer(
 	options: OAuthServerOptions,
 ): Promise<OAuthCallbackServer> {
-	const { state, timeoutMs = 3 * 60 * 1000 } = options;
+	const {
+		state,
+		timeoutMs = 3 * 60 * 1000,
+		port = DEFAULT_OAUTH_CALLBACK_PORT,
+	} = options;
 	let origin = "http://localhost";
 	let resolved = false;
 	let resolveCode: (code: string) => void;
@@ -202,12 +209,23 @@ export async function startOAuthCallbackServer(
 		rejectCode(err as Error);
 	});
 
-	await new Promise<void>((resolve) => {
-		server.listen(0, "127.0.0.1", resolve);
+	await new Promise<void>((resolve, reject) => {
+		const onListening = () => {
+			server.off("error", onError);
+			resolve();
+		};
+		const onError = (err: Error) => {
+			server.off("listening", onListening);
+			reject(err);
+		};
+
+		server.once("listening", onListening);
+		server.once("error", onError);
+		server.listen(port, "127.0.0.1");
 	});
 
-	const { port } = server.address() as AddressInfo;
-	origin = `http://localhost:${port}`;
+	const { port: listeningPort } = server.address() as AddressInfo;
+	origin = `http://localhost:${listeningPort}`;
 	const redirectUri = `${origin}/callback`;
 
 	const timeout = setTimeout(() => {
@@ -233,5 +251,5 @@ export async function startOAuthCallbackServer(
 		},
 	);
 
-	return { port, redirectUri, waitForCode, close };
+	return { port: listeningPort, redirectUri, waitForCode, close };
 }
