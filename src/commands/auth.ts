@@ -41,6 +41,14 @@ async function prompt(question: string): Promise<string> {
 	}
 }
 
+function parseCallbackPort(rawPort: string): number | null {
+	const parsed = Number(rawPort);
+	if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+		return null;
+	}
+	return parsed;
+}
+
 export function registerAuthCommand(program: Command): void {
 	const auth = program.command("auth").description("Manage authentication");
 
@@ -56,11 +64,16 @@ export function registerAuthCommand(program: Command): void {
 			"--client-id <clientId>",
 			"OAuth client ID to use for this login (saved for future logins)",
 		)
+		.option(
+			"--callback-port <port>",
+			`Local OAuth callback port (default: ${DEFAULT_OAUTH_CALLBACK_PORT})`,
+		)
 		.action(
 			async (options: {
 				token?: string;
 				clientId?: string;
 				baseUrl?: string;
+				callbackPort?: string;
 			}) => {
 				const configuredBaseUrl = getBaseUrl();
 				const optionBaseUrl = options.baseUrl?.trim();
@@ -74,6 +87,28 @@ export function registerAuthCommand(program: Command): void {
 				}
 				url = url.replace(/\/$/, "");
 				const optionClientId = options.clientId?.trim();
+				const optionCallbackPort = options.callbackPort?.trim();
+				const envCallbackPort = process.env.OUTLINE_OAUTH_CALLBACK_PORT?.trim();
+				const rawCallbackPort = optionCallbackPort || envCallbackPort;
+				let callbackPort = DEFAULT_OAUTH_CALLBACK_PORT;
+
+				if (rawCallbackPort) {
+					const parsedPort = parseCallbackPort(rawCallbackPort);
+					if (!parsedPort) {
+						console.error(
+							formatError(
+								"OAUTH_CALLBACK_PORT_INVALID",
+								`Invalid callback port: ${rawCallbackPort}`,
+								[
+									"Use an integer between 1 and 65535",
+									"Set via --callback-port or OUTLINE_OAUTH_CALLBACK_PORT",
+								],
+							),
+						);
+						process.exit(1);
+					}
+					callbackPort = parsedPort;
+				}
 
 				if (options.token) {
 					saveConfig(options.token.trim(), url, optionClientId);
@@ -124,16 +159,19 @@ export function registerAuthCommand(program: Command): void {
 					ReturnType<typeof startOAuthCallbackServer>
 				>;
 				try {
-					callbackServer = await startOAuthCallbackServer({ state });
+					callbackServer = await startOAuthCallbackServer({
+						state,
+						port: callbackPort,
+					});
 				} catch (err) {
 					const error = err as NodeJS.ErrnoException;
 					const hints = [
-						`Ensure http://localhost:${DEFAULT_OAUTH_CALLBACK_PORT}/callback is reachable from your browser`,
+						`Ensure http://localhost:${callbackPort}/callback is reachable from your browser`,
 						"Re-run with 'ol auth login --token <token>' for manual auth",
 					];
 					if (error.code === "EADDRINUSE") {
 						hints.unshift(
-							`Port ${DEFAULT_OAUTH_CALLBACK_PORT} is already in use. Close the other process using it.`,
+							`Port ${callbackPort} is already in use. Close the other process using it.`,
 						);
 					}
 

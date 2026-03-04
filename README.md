@@ -28,6 +28,7 @@ npm link
 ol auth login     # opens browser for OAuth authorization
 ol auth login --base-url <your-outline-url> # skip base URL prompt for this login
 ol auth login --client-id <your-client-id>  # skip prompt for this login
+ol auth login --callback-port 54969         # override local callback port
 ol auth status    # show current auth state
 ol auth logout    # clear saved credentials
 ```
@@ -40,6 +41,8 @@ ol auth logout    # clear saved credentials
    (or pass it directly with `--client-id <your-client-id>`)
 4. If needed, pass `--base-url <your-outline-url>` or set `OUTLINE_URL`
    (for self-hosted instances or non-default URLs)
+5. If needed, pass `--callback-port <port>` or set `OUTLINE_OAUTH_CALLBACK_PORT`
+   and register `http://localhost:<port>/callback` in your OAuth app
 
 The client ID is saved for future logins. You can also set `OUTLINE_OAUTH_CLIENT_ID`
 for your local environment.
@@ -59,6 +62,9 @@ Generate a token in Outline under Settings → API Tokens.
 Token resolution: `OUTLINE_API_TOKEN` env var → `~/.config/outline-cli/config.json`.
 
 Base URL resolution: `OUTLINE_URL` env var → config file → `https://app.getoutline.com`.
+
+Callback port resolution for OAuth login:
+`--callback-port` → `OUTLINE_OAUTH_CALLBACK_PORT` → `54969`.
 
 Self-hosted instances: pass `--base-url` or set `OUTLINE_URL` (you can still provide it interactively).
 
