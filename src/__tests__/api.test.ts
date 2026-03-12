@@ -1,32 +1,35 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/auth.js", () => ({
 	getApiToken: () => "test-token",
 	getBaseUrl: () => "https://test.outline.com",
 }));
 
+vi.mock("../transport/fetch-with-retry.js", () => ({
+	fetchWithRetry: vi.fn(),
+}));
+
 describe("apiRequest", () => {
-	beforeEach(() => {
-		vi.stubGlobal("fetch", vi.fn());
-	});
-
 	afterEach(() => {
-		vi.unstubAllGlobals();
+		vi.clearAllMocks();
 	});
 
-	it("makes POST request with correct headers", async () => {
+	it("uses fetchWithRetry for API requests", async () => {
 		const mockResponse = {
 			ok: true,
 			json: async () => ({ data: { id: "123" } }),
 		};
-		(fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
+		const { fetchWithRetry } = await import("../transport/fetch-with-retry.js");
+		(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(
+			mockResponse,
+		);
 
 		const { apiRequest } = await import("../lib/api.js");
 		await apiRequest("documents.info", { id: "abc" });
 
-		expect(fetch).toHaveBeenCalledWith(
-			"https://test.outline.com/api/documents.info",
-			{
+		expect(fetchWithRetry).toHaveBeenCalledWith({
+			url: "https://test.outline.com/api/documents.info",
+			options: {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -34,7 +37,7 @@ describe("apiRequest", () => {
 				},
 				body: JSON.stringify({ id: "abc" }),
 			},
-		);
+		});
 	});
 
 	it("returns data and pagination", async () => {
@@ -45,7 +48,10 @@ describe("apiRequest", () => {
 				pagination: { offset: 0, limit: 25 },
 			}),
 		};
-		(fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
+		const { fetchWithRetry } = await import("../transport/fetch-with-retry.js");
+		(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(
+			mockResponse,
+		);
 
 		const { apiRequest } = await import("../lib/api.js");
 		const result = await apiRequest("documents.list");
@@ -64,7 +70,10 @@ describe("apiRequest", () => {
 				message: "Authentication required",
 			}),
 		};
-		(fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
+		const { fetchWithRetry } = await import("../transport/fetch-with-retry.js");
+		(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(
+			mockResponse,
+		);
 
 		const { apiRequest } = await import("../lib/api.js");
 		await expect(apiRequest("auth.info")).rejects.toThrow(
@@ -81,7 +90,10 @@ describe("apiRequest", () => {
 				throw new Error("not json");
 			},
 		};
-		(fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
+		const { fetchWithRetry } = await import("../transport/fetch-with-retry.js");
+		(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(
+			mockResponse,
+		);
 
 		const { apiRequest } = await import("../lib/api.js");
 		await expect(apiRequest("documents.list")).rejects.toThrow(
