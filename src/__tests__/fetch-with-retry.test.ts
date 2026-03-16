@@ -105,6 +105,56 @@ describe("fetchWithRetry", () => {
 		expect(response.ok).toBe(true);
 	});
 
+	it("retries timeout errors when configured", async () => {
+		vi.useFakeTimers();
+
+		const fetchMock = vi.fn();
+		fetchMock
+			.mockImplementationOnce(
+				(_url: RequestInfo | URL, options?: RequestInit) =>
+					new Promise<Response>((_resolve, reject) => {
+						options?.signal?.addEventListener(
+							"abort",
+							() => {
+								const reason = options.signal?.reason;
+								reject(
+									reason instanceof Error
+										? reason
+										: new Error(String(reason ?? "Request aborted")),
+								);
+							},
+							{ once: true },
+						);
+					}),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ ok: true }), {
+					status: 200,
+					statusText: "OK",
+				}),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { fetchWithRetry } = await import("../transport/fetch-with-retry.js");
+		const requestPromise = fetchWithRetry({
+			url: "https://test.outline.com/api/documents.info",
+			options: {
+				method: "GET",
+				timeout: 20,
+			},
+			retryConfig: {
+				retries: 1,
+				retryDelay: () => 0,
+			},
+		});
+
+		await vi.advanceTimersByTimeAsync(20);
+		const response = await requestPromise;
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(response.ok).toBe(true);
+	});
+
 	it("aborts built-in fetch requests when the timeout is reached", async () => {
 		vi.useFakeTimers();
 

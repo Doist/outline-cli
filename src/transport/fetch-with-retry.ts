@@ -22,8 +22,16 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
 	retryDelay: () => 0,
 };
 
+const TIMEOUT_ERROR_NAME = "TimeoutError";
+
+function createTimeoutError(timeoutMs: number): Error {
+	const error = new Error(`Request timeout after ${timeoutMs}ms`);
+	error.name = TIMEOUT_ERROR_NAME;
+	return error;
+}
+
 function isNetworkError(error: Error): boolean {
-	return error instanceof TypeError;
+	return error instanceof TypeError || error.name === TIMEOUT_ERROR_NAME;
 }
 
 function wait(delayMs: number): Promise<void> {
@@ -39,7 +47,7 @@ function createTimeoutSignal(
 } {
 	const controller = new AbortController();
 	const timeoutId = setTimeout(() => {
-		controller.abort(new Error(`Request timeout after ${timeoutMs}ms`));
+		controller.abort(createTimeoutError(timeoutMs));
 	}, timeoutMs);
 	let abortHandler: (() => void) | undefined;
 
