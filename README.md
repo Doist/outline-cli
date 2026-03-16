@@ -4,6 +4,8 @@ CLI for the [Outline](https://www.getoutline.com) wiki/knowledge base API.
 
 ## Installation
 
+Requires Node 20.18.1+.
+
 > ```bash
 > npm install -g @doist/outline-cli
 > ```
