@@ -103,24 +103,21 @@ export async function fetchWithRetry(
 
 			return response;
 		} catch (error) {
+			if (clearTimeoutFn) {
+				clearTimeoutFn();
+			}
+
 			lastError = error as Error;
 			const shouldRetry =
 				attempt < config.retries && config.retryCondition(lastError);
 
 			if (!shouldRetry) {
-				if (clearTimeoutFn) {
-					clearTimeoutFn();
-				}
 				throw lastError;
 			}
 
 			const delay = config.retryDelay(attempt + 1);
 			if (delay > 0) {
 				await wait(delay);
-			}
-
-			if (clearTimeoutFn) {
-				clearTimeoutFn();
 			}
 		}
 	}
