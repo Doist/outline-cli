@@ -1,18 +1,50 @@
-# outline-cli
+# Outline CLI
 
 CLI for the [Outline](https://www.getoutline.com) wiki/knowledge base API.
 
-## Install
+## Installation
 
-### From GitHub (recommended)
+> ```bash
+> npm install -g @doist/outline-cli
+> ```
 
-```sh
-npm install -g github:Doist/outline-cli
+### Agent Skills
+
+Install skills for your coding agent:
+
+```bash
+ol skill install claude-code
+ol skill install codex
+ol skill install cursor
+ol skill install gemini
+ol skill install pi
+ol skill install universal
 ```
 
-### From source
+Skills are installed to `~/<agent-dir>/skills/outline-cli/SKILL.md` (e.g. `~/.claude/` for claude-code, `~/.agents/` for universal, etc.). When updating the CLI, installed skills are updated automatically. The `universal` agent is compatible with Amp, OpenCode, and other agents that read from `~/.agents/`.
 
-```sh
+```bash
+ol skill list
+ol skill uninstall <agent>
+```
+
+## Uninstallation
+
+First, remove any installed agent skills:
+
+```bash
+ol skill uninstall <agent>
+```
+
+Then uninstall the CLI:
+
+```bash
+npm uninstall -g @doist/outline-cli
+```
+
+## Local Setup
+
+```bash
 git clone https://github.com/Doist/outline-cli.git
 cd outline-cli
 npm install
@@ -20,17 +52,17 @@ npm run build
 npm link
 ```
 
-## Auth
+## Setup
 
 ### OAuth login (recommended)
 
-```sh
-ol auth login     # opens browser for OAuth authorization
-ol auth login --base-url <your-outline-url> # skip base URL prompt for this login
-ol auth login --client-id <your-client-id>  # skip prompt for this login
-ol auth login --callback-port 54969         # override local callback port
-ol auth status    # show current auth state
-ol auth logout    # clear saved credentials
+```bash
+ol auth login
+ol auth login --base-url <your-outline-url>
+ol auth login --client-id <your-client-id>
+ol auth login --callback-port 54969
+ol auth status
+ol auth logout
 ```
 
 **Setup:**
@@ -51,7 +83,7 @@ for your local environment.
 
 If you prefer using an API token directly:
 
-```sh
+```bash
 ol auth login --token <your-api-token>
 ```
 
@@ -70,7 +102,7 @@ Self-hosted instances: pass `--base-url` or set `OUTLINE_URL` (you can still pro
 
 ## Commands
 
-```sh
+```bash
 # Search
 ol search "query" --limit 10 --collection <id> --status published
 
@@ -105,7 +137,7 @@ All commands support:
 
 ## Development
 
-```sh
+```bash
 npm install
 npm run dev          # watch mode
 npm run type-check   # typecheck without emitting
