@@ -1,3 +1,4 @@
+import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { getApiToken, getBaseUrl } from './auth.js'
 import { type SpinnerOptions, withSpinner } from './spinner.js'
 
@@ -53,13 +54,16 @@ async function rawApiRequest<T>(path: string, body: object = {}): Promise<Pagina
     const baseUrl = getBaseUrl()
     const token = getApiToken()
 
-    const res = await fetch(`${baseUrl}/api/${path}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+    const res = await fetchWithRetry({
+        url: `${baseUrl}/api/${path}`,
+        options: {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
     })
 
     if (!res.ok) {

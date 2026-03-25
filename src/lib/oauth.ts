@@ -1,3 +1,5 @@
+import { fetchWithRetry } from '../transport/fetch-with-retry.js'
+
 interface AuthorizationUrlOptions {
     baseUrl: string
     clientId: string
@@ -43,12 +45,15 @@ export async function exchangeCodeForToken(options: TokenExchangeOptions): Promi
         code,
     })
 
-    const res = await fetch(`${baseUrl}/oauth/token`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+    const res = await fetchWithRetry({
+        url: `${baseUrl}/oauth/token`,
+        options: {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: params.toString(),
         },
-        body: params.toString(),
     })
 
     const json = (await res.json()) as TokenResponse
