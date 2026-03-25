@@ -1,11 +1,27 @@
 {
-	"name": "outline-cli",
-	"version": "0.1.0",
+	"name": "@doist/outline-cli",
+	"version": "1.0.0",
 	"description": "CLI for the Outline wiki/knowledge base API",
 	"type": "module",
 	"bin": {
 		"ol": "./dist/index.js"
 	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Doist/outline-cli.git"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"homepage": "https://github.com/Doist/outline-cli#readme",
+	"bugs": {
+		"url": "https://github.com/Doist/outline-cli/issues"
+	},
+	"files": [
+		"dist",
+		"CHANGELOG.md"
+	],
 	"scripts": {
 		"build": "tsc",
 		"dev": "tsc --watch",
