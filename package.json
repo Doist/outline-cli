@@ -13,7 +13,8 @@
 		"format": "biome check --write",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"prepare": "node scripts/prepare.js"
+		"prepare": "node scripts/prepare.js",
+		"postinstall": "test -f dist/postinstall.js && node dist/postinstall.js || true"
 	},
 	"keywords": [
 		"outline",
