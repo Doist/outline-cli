@@ -17,6 +17,21 @@ export const skillInstallers: Record<string, SkillInstaller> = {
 		description: "Cursor skill for Outline CLI",
 		dirName: ".cursor",
 	}),
+	gemini: createInstaller({
+		name: "gemini",
+		description: "Gemini CLI skill for Outline CLI",
+		dirName: ".gemini",
+	}),
+	pi: createInstaller({
+		name: "pi",
+		description: "Pi skill for Outline CLI",
+		dirName: ".pi",
+	}),
+	universal: createInstaller({
+		name: "universal",
+		description: "Universal agent skill for Outline CLI",
+		dirName: ".agents",
+	}),
 };
 
 export function getInstaller(agent: string): SkillInstaller | undefined {

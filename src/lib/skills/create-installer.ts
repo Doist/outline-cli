@@ -53,13 +53,15 @@ export function createInstaller(config: InstallerConfig): SkillInstaller {
 		},
 
 		async install(local: boolean, force: boolean): Promise<void> {
-			const agentDir = join(homedir(), config.dirName);
-			try {
-				await access(agentDir);
-			} catch {
-				throw new Error(
-					`${config.name} does not appear to be installed (${agentDir} not found)`,
-				);
+			if (!local && config.dirName !== ".agents") {
+				const agentDir = join(homedir(), config.dirName);
+				try {
+					await access(agentDir);
+				} catch {
+					throw new Error(
+						`${config.name} does not appear to be installed (${agentDir} not found)`,
+					);
+				}
 			}
 			const filepath = getInstallPath(local);
 			const exists = await this.isInstalled(local);
@@ -69,6 +71,11 @@ export function createInstaller(config: InstallerConfig): SkillInstaller {
 				);
 			}
 			await mkdir(dirname(filepath), { recursive: true });
+			await writeFile(filepath, this.generateContent(), "utf-8");
+		},
+
+		async update(local: boolean): Promise<void> {
+			const filepath = getInstallPath(local);
 			await writeFile(filepath, this.generateContent(), "utf-8");
 		},
 
