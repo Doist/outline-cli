@@ -30,7 +30,6 @@
 		"format": "biome check --write",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"prepare": "node scripts/prepare.js",
 		"postinstall": "node scripts/postinstall.js"
 	},
 	"keywords": [
