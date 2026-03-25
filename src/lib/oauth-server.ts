@@ -1,32 +1,32 @@
-import http from "node:http";
-import type { AddressInfo } from "node:net";
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 
 interface OAuthServerOptions {
-	state: string;
-	timeoutMs?: number;
-	port?: number;
+    state: string
+    timeoutMs?: number
+    port?: number
 }
 
 export interface OAuthCallbackServer {
-	port: number;
-	redirectUri: string;
-	waitForCode: Promise<string>;
-	close: () => void;
+    port: number
+    redirectUri: string
+    waitForCode: Promise<string>
+    close: () => void
 }
 
-export const DEFAULT_OAUTH_CALLBACK_PORT = 54969;
+export const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 
 function escapeHtml(text: string): string {
-	return text
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#39;");
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
 }
 
 function renderPage(title: string, subtitle: string, body: string): string {
-	return `<!doctype html>
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -109,147 +109,142 @@ function renderPage(title: string, subtitle: string, body: string): string {
     <p class="hint">Return to your terminal and continue with <code>ol</code> commands.</p>
   </main>
 </body>
-</html>`;
+</html>`
 }
 
 function renderSuccessPage(): string {
-	return renderPage(
-		"Login complete",
-		"Outline CLI is now authenticated.",
-		'<div class="message success">You can close this tab now.</div>',
-	);
+    return renderPage(
+        'Login complete',
+        'Outline CLI is now authenticated.',
+        '<div class="message success">You can close this tab now.</div>',
+    )
 }
 
 function renderErrorPage(message: string): string {
-	return renderPage(
-		"Authentication failed",
-		"Outline CLI could not finish OAuth login.",
-		`<div class="message error">${escapeHtml(message)}</div>`,
-	);
+    return renderPage(
+        'Authentication failed',
+        'Outline CLI could not finish OAuth login.',
+        `<div class="message error">${escapeHtml(message)}</div>`,
+    )
 }
 
 export async function startOAuthCallbackServer(
-	options: OAuthServerOptions,
+    options: OAuthServerOptions,
 ): Promise<OAuthCallbackServer> {
-	const {
-		state,
-		timeoutMs = 3 * 60 * 1000,
-		port = DEFAULT_OAUTH_CALLBACK_PORT,
-	} = options;
-	let origin = "http://localhost";
-	let resolved = false;
-	let resolveCode: (code: string) => void;
-	let rejectCode: (error: Error) => void;
+    const { state, timeoutMs = 3 * 60 * 1000, port = DEFAULT_OAUTH_CALLBACK_PORT } = options
+    let origin = 'http://localhost'
+    let resolved = false
+    let resolveCode: (code: string) => void
+    let rejectCode: (error: Error) => void
 
-	const waitForCode = new Promise<string>((resolve, reject) => {
-		resolveCode = resolve;
-		rejectCode = reject;
-	});
+    const waitForCode = new Promise<string>((resolve, reject) => {
+        resolveCode = resolve
+        rejectCode = reject
+    })
 
-	const server = http.createServer((req, res) => {
-		if (resolved) {
-			res.writeHead(409, { "Content-Type": "text/html; charset=utf-8" });
-			res.end(renderErrorPage("Authorization was already received."));
-			return;
-		}
+    const server = http.createServer((req, res) => {
+        if (resolved) {
+            res.writeHead(409, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end(renderErrorPage('Authorization was already received.'))
+            return
+        }
 
-		if (req.method !== "GET" || !req.url) {
-			res.writeHead(405, { "Content-Type": "text/html; charset=utf-8" });
-			res.end(renderErrorPage("Invalid callback request method."));
-			return;
-		}
+        if (req.method !== 'GET' || !req.url) {
+            res.writeHead(405, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end(renderErrorPage('Invalid callback request method.'))
+            return
+        }
 
-		const url = new URL(req.url, origin);
-		if (url.pathname !== "/callback") {
-			res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-			res.end(renderErrorPage("Unknown callback path."));
-			return;
-		}
+        const url = new URL(req.url, origin)
+        if (url.pathname !== '/callback') {
+            res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end(renderErrorPage('Unknown callback path.'))
+            return
+        }
 
-		// Check for OAuth error response first
-		const error = url.searchParams.get("error");
-		if (error) {
-			const errorDescription =
-				url.searchParams.get("error_description") || error;
-			res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-			res.end(renderErrorPage(`Authorization failed: ${errorDescription}`));
-			rejectCode(new Error(`OAuth authorization denied: ${errorDescription}`));
-			resolved = true;
-			return;
-		}
+        // Check for OAuth error response first
+        const error = url.searchParams.get('error')
+        if (error) {
+            const errorDescription = url.searchParams.get('error_description') || error
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end(renderErrorPage(`Authorization failed: ${errorDescription}`))
+            rejectCode(new Error(`OAuth authorization denied: ${errorDescription}`))
+            resolved = true
+            return
+        }
 
-		const code = url.searchParams.get("code");
-		const returnedState = url.searchParams.get("state");
+        const code = url.searchParams.get('code')
+        const returnedState = url.searchParams.get('state')
 
-		if (!code || !returnedState) {
-			res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-			res.end(renderErrorPage("Missing OAuth code or state parameter."));
-			rejectCode(new Error("Missing OAuth authorization code."));
-			resolved = true;
-			return;
-		}
+        if (!code || !returnedState) {
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end(renderErrorPage('Missing OAuth code or state parameter.'))
+            rejectCode(new Error('Missing OAuth authorization code.'))
+            resolved = true
+            return
+        }
 
-		if (returnedState !== state) {
-			res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" });
-			res.end(renderErrorPage("Invalid OAuth state parameter."));
-			rejectCode(new Error("OAuth state mismatch."));
-			resolved = true;
-			return;
-		}
+        if (returnedState !== state) {
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end(renderErrorPage('Invalid OAuth state parameter.'))
+            rejectCode(new Error('OAuth state mismatch.'))
+            resolved = true
+            return
+        }
 
-		res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-		res.end(renderSuccessPage());
-		resolved = true;
-		resolveCode(code);
-	});
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end(renderSuccessPage())
+        resolved = true
+        resolveCode(code)
+    })
 
-	server.on("error", (err) => {
-		if (resolved) return;
-		resolved = true;
-		rejectCode(err as Error);
-	});
+    server.on('error', (err) => {
+        if (resolved) return
+        resolved = true
+        rejectCode(err as Error)
+    })
 
-	await new Promise<void>((resolve, reject) => {
-		const onListening = () => {
-			server.off("error", onError);
-			resolve();
-		};
-		const onError = (err: Error) => {
-			server.off("listening", onListening);
-			reject(err);
-		};
+    await new Promise<void>((resolve, reject) => {
+        const onListening = () => {
+            server.off('error', onError)
+            resolve()
+        }
+        const onError = (err: Error) => {
+            server.off('listening', onListening)
+            reject(err)
+        }
 
-		server.once("listening", onListening);
-		server.once("error", onError);
-		server.listen(port, "127.0.0.1");
-	});
+        server.once('listening', onListening)
+        server.once('error', onError)
+        server.listen(port, '127.0.0.1')
+    })
 
-	const { port: listeningPort } = server.address() as AddressInfo;
-	origin = `http://localhost:${listeningPort}`;
-	const redirectUri = `${origin}/callback`;
+    const { port: listeningPort } = server.address() as AddressInfo
+    origin = `http://localhost:${listeningPort}`
+    const redirectUri = `${origin}/callback`
 
-	const timeout = setTimeout(() => {
-		if (resolved) return;
-		resolved = true;
-		rejectCode(new Error("Timed out waiting for OAuth callback."));
-		server.close();
-	}, timeoutMs);
+    const timeout = setTimeout(() => {
+        if (resolved) return
+        resolved = true
+        rejectCode(new Error('Timed out waiting for OAuth callback.'))
+        server.close()
+    }, timeoutMs)
 
-	const close = () => {
-		clearTimeout(timeout);
-		server.close();
-	};
+    const close = () => {
+        clearTimeout(timeout)
+        server.close()
+    }
 
-	waitForCode.then(
-		() => {
-			clearTimeout(timeout);
-			server.close();
-		},
-		() => {
-			clearTimeout(timeout);
-			server.close();
-		},
-	);
+    waitForCode.then(
+        () => {
+            clearTimeout(timeout)
+            server.close()
+        },
+        () => {
+            clearTimeout(timeout)
+            server.close()
+        },
+    )
 
-	return { port: listeningPort, redirectUri, waitForCode, close };
+    return { port: listeningPort, redirectUri, waitForCode, close }
 }

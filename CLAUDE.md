@@ -41,6 +41,7 @@ Each file in `src/commands/` exports a `registerXxxCommand(program)` function th
 ## Testing
 
 Vitest with module mocking. Tests live in `src/__tests__/`. Common patterns:
+
 - Mock `apiRequest` with `vi.mock()`
 - Stub `fetch` globally for API tests
 - Capture `console.log` calls in an array for output assertions

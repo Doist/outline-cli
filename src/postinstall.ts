@@ -1,3 +1,3 @@
-import { updateAllInstalledSkills } from "./lib/skills/update-installed.js";
+import { updateAllInstalledSkills } from './lib/skills/update-installed.js'
 
-updateAllInstalledSkills(false).catch(() => {});
+updateAllInstalledSkills(false).catch(() => {})
