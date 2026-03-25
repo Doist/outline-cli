@@ -1,104 +1,98 @@
-import chalk from "chalk";
-import type { Command } from "commander";
-import { formatError } from "../lib/output.js";
-import {
-	getInstaller,
-	listAgents,
-	skillInstallers,
-} from "../lib/skills/index.js";
+import chalk from 'chalk'
+import type { Command } from 'commander'
+import { formatError } from '../lib/output.js'
+import { getInstaller, listAgents, skillInstallers } from '../lib/skills/index.js'
 
 export function registerSkillCommand(program: Command): void {
-	const skill = program
-		.command("skill")
-		.description("Manage coding agent skills/integrations");
+    const skill = program.command('skill').description('Manage coding agent skills/integrations')
 
-	const installCmd = skill
-		.command("install [agent]")
-		.description("Install skill for a coding agent")
-		.option("--local", "Install in current project instead of global")
-		.option("--force", "Overwrite existing skill file")
-		.action(async (agent: string | undefined, opts) => {
-			if (!agent) {
-				installCmd.help();
-				return;
-			}
+    const installCmd = skill
+        .command('install [agent]')
+        .description('Install skill for a coding agent')
+        .option('--local', 'Install in current project instead of global')
+        .option('--force', 'Overwrite existing skill file')
+        .action(async (agent: string | undefined, opts) => {
+            if (!agent) {
+                installCmd.help()
+                return
+            }
 
-			const installer = getInstaller(agent);
-			if (!installer) {
-				const available = listAgents().join(", ");
-				console.error(
-					formatError("UNKNOWN_AGENT", `Unknown agent: ${agent}`, [
-						`Available agents: ${available}`,
-						"Run 'ol skill list' to see all agents",
-					]),
-				);
-				process.exit(1);
-			}
+            const installer = getInstaller(agent)
+            if (!installer) {
+                const available = listAgents().join(', ')
+                console.error(
+                    formatError('UNKNOWN_AGENT', `Unknown agent: ${agent}`, [
+                        `Available agents: ${available}`,
+                        "Run 'ol skill list' to see all agents",
+                    ]),
+                )
+                process.exit(1)
+            }
 
-			const local = opts.local ?? false;
-			const force = opts.force ?? false;
+            const local = opts.local ?? false
+            const force = opts.force ?? false
 
-			await installer.install(local, force);
+            await installer.install(local, force)
 
-			const filepath = installer.getInstallPath(local);
-			console.log(chalk.green("✓"), `Installed ${installer.name} skill`);
-			console.log(chalk.dim(filepath));
-		});
+            const filepath = installer.getInstallPath(local)
+            console.log(chalk.green('✓'), `Installed ${installer.name} skill`)
+            console.log(chalk.dim(filepath))
+        })
 
-	const uninstallCmd = skill
-		.command("uninstall [agent]")
-		.description("Uninstall skill for a coding agent")
-		.option("--local", "Remove from current project instead of global")
-		.action(async (agent: string | undefined, opts) => {
-			if (!agent) {
-				uninstallCmd.help();
-				return;
-			}
+    const uninstallCmd = skill
+        .command('uninstall [agent]')
+        .description('Uninstall skill for a coding agent')
+        .option('--local', 'Remove from current project instead of global')
+        .action(async (agent: string | undefined, opts) => {
+            if (!agent) {
+                uninstallCmd.help()
+                return
+            }
 
-			const installer = getInstaller(agent);
-			if (!installer) {
-				const available = listAgents().join(", ");
-				console.error(
-					formatError("UNKNOWN_AGENT", `Unknown agent: ${agent}`, [
-						`Available agents: ${available}`,
-						"Run 'ol skill list' to see all agents",
-					]),
-				);
-				process.exit(1);
-			}
+            const installer = getInstaller(agent)
+            if (!installer) {
+                const available = listAgents().join(', ')
+                console.error(
+                    formatError('UNKNOWN_AGENT', `Unknown agent: ${agent}`, [
+                        `Available agents: ${available}`,
+                        "Run 'ol skill list' to see all agents",
+                    ]),
+                )
+                process.exit(1)
+            }
 
-			const local = opts.local ?? false;
-			await installer.uninstall(local);
-			console.log(chalk.green("✓"), `Uninstalled ${installer.name} skill`);
-		});
+            const local = opts.local ?? false
+            await installer.uninstall(local)
+            console.log(chalk.green('✓'), `Uninstalled ${installer.name} skill`)
+        })
 
-	skill
-		.command("list")
-		.description("List supported agents and install status")
-		.action(async () => {
-			const agents = listAgents();
+    skill
+        .command('list')
+        .description('List supported agents and install status')
+        .action(async () => {
+            const agents = listAgents()
 
-			console.log(chalk.bold("Available agents:"));
-			console.log("");
+            console.log(chalk.bold('Available agents:'))
+            console.log('')
 
-			for (const agentName of agents) {
-				const installer = skillInstallers[agentName];
-				const globalInstalled = await installer.isInstalled(false);
-				const localInstalled = await installer.isInstalled(true);
+            for (const agentName of agents) {
+                const installer = skillInstallers[agentName]
+                const globalInstalled = await installer.isInstalled(false)
+                const localInstalled = await installer.isInstalled(true)
 
-				const status: string[] = [];
-				if (globalInstalled) status.push("global");
-				if (localInstalled) status.push("local");
+                const status: string[] = []
+                if (globalInstalled) status.push('global')
+                if (localInstalled) status.push('local')
 
-				const statusStr =
-					status.length > 0
-						? chalk.green(`[${status.join(", ")}]`)
-						: chalk.dim("[not installed]");
+                const statusStr =
+                    status.length > 0
+                        ? chalk.green(`[${status.join(', ')}]`)
+                        : chalk.dim('[not installed]')
 
-				console.log(`  ${agentName}`);
-				console.log(`    ${chalk.dim(installer.description)}`);
-				console.log(`    ${statusStr}`);
-				console.log("");
-			}
-		});
+                console.log(`  ${agentName}`)
+                console.log(`    ${chalk.dim(installer.description)}`)
+                console.log(`    ${statusStr}`)
+                console.log('')
+            }
+        })
 }

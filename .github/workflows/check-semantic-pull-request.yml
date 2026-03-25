@@ -1,34 +1,34 @@
 name: Check semantic pull request
 
 on:
-  pull_request:
-    types:
-      - opened
-      - edited
-      - reopened
-      - synchronize
+    pull_request:
+        types:
+            - opened
+            - edited
+            - reopened
+            - synchronize
 
 permissions:
-  pull-requests: read
+    pull-requests: read
 
 jobs:
-  semantic-pull-request:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Validate PR title
-        uses: amannn/action-semantic-pull-request@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            docs
-            chore
-            refactor
-            test
-            ci
-            perf
-            style
-            build
-            revert
+    semantic-pull-request:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Validate PR title
+              uses: amannn/action-semantic-pull-request@v5
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  types: |
+                      feat
+                      fix
+                      docs
+                      chore
+                      refactor
+                      test
+                      ci
+                      perf
+                      style
+                      build
+                      revert

@@ -1,6 +1,6 @@
-export const SKILL_NAME = "outline";
+export const SKILL_NAME = 'outline'
 export const SKILL_DESCRIPTION =
-	"Search and manage Outline wiki documents and collections via the ol CLI";
+    'Search and manage Outline wiki documents and collections via the ol CLI'
 
 export const SKILL_CONTENT = `# Outline CLI (ol)
 
@@ -98,4 +98,4 @@ ol doc list --collection <id> --sort title --direction ASC
 \`\`\`bash
 ol doc list --ndjson --full | jq -r '.title'
 \`\`\`
-`;
+`
