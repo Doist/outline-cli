@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/Doist/outline-cli/compare/v1.0.0...v1.0.1) (2026-03-25)
+
+
+### Bug Fixes
+
+* correct skill name and quote YAML description ([#38](https://github.com/Doist/outline-cli/issues/38)) ([e0e4fa4](https://github.com/Doist/outline-cli/commit/e0e4fa435dcfc89b1e29e4b8d02d6ba911dfdb7f))
+
 # 1.0.0 (2026-03-25)
 
 ### Bug Fixes
