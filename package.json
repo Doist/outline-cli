@@ -20,6 +20,7 @@
 	},
 	"files": [
 		"dist",
+		"scripts",
 		"CHANGELOG.md"
 	],
 	"scripts": {
@@ -30,7 +31,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"prepare": "node scripts/prepare.js",
-		"postinstall": "test -f dist/postinstall.js && node dist/postinstall.js || true"
+		"postinstall": "node scripts/postinstall.js"
 	},
 	"keywords": [
 		"outline",
