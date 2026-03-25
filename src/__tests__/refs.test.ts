@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./auth.js", () => ({
+vi.mock("../lib/auth.js", () => ({
 	getApiToken: () => "test-token",
 	getBaseUrl: () => "https://test.outline.com",
 }));
 
 const mockApiRequest = vi.fn();
-vi.mock("./api.js", () => ({
+vi.mock("../lib/api.js", () => ({
 	apiRequest: (...args: unknown[]) => mockApiRequest(...args),
 }));
 
@@ -28,7 +28,7 @@ describe("resolveDocumentRef", () => {
 		};
 		mockApiRequest.mockResolvedValueOnce({ data: mockDoc });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		const result = await resolveDocumentRef(
 			"550e8400-e29b-41d4-a716-446655440000",
 		);
@@ -43,7 +43,7 @@ describe("resolveDocumentRef", () => {
 		const mockDoc = { id: "abc123", title: "Test Doc", urlId: "test-doc-abc" };
 		mockApiRequest.mockResolvedValueOnce({ data: mockDoc });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		const result = await resolveDocumentRef("abc123");
 
 		expect(result).toEqual(mockDoc);
@@ -60,7 +60,7 @@ describe("resolveDocumentRef", () => {
 		};
 		mockApiRequest.mockResolvedValueOnce({ data: mockDoc });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		const result = await resolveDocumentRef("my-document-xyz789");
 
 		expect(result).toEqual(mockDoc);
@@ -77,7 +77,7 @@ describe("resolveDocumentRef", () => {
 		// "engineering guide" has spaces, doesn't look like an ID
 		mockApiRequest.mockResolvedValueOnce({ data: mockDocs });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		const result = await resolveDocumentRef("engineering guide");
 
 		expect(result).toEqual(mockDocs[0]);
@@ -93,7 +93,7 @@ describe("resolveDocumentRef", () => {
 			.mockRejectedValueOnce(new Error("Not found")) // ID lookup fails
 			.mockResolvedValueOnce({ data: mockDocs }); // falls back to list
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		const result = await resolveDocumentRef("product");
 
 		expect(result).toEqual(mockDocs[1]);
@@ -109,7 +109,7 @@ describe("resolveDocumentRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockDocs });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		await expect(resolveDocumentRef("engineering")).rejects.toThrow(
 			/Ambiguous Document reference/,
 		);
@@ -124,7 +124,7 @@ describe("resolveDocumentRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockDocs });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		try {
 			await resolveDocumentRef("engineering");
 		} catch (error) {
@@ -145,7 +145,7 @@ describe("resolveDocumentRef", () => {
 		// "meeting notes" has spaces, doesn't look like an ID
 		mockApiRequest.mockResolvedValueOnce({ data: mockDocs });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		await expect(resolveDocumentRef("meeting notes")).rejects.toThrow(
 			/Ambiguous Document reference.*Multiple items have this exact name/,
 		);
@@ -158,7 +158,7 @@ describe("resolveDocumentRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockDocs });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		await expect(resolveDocumentRef("nonexistent")).rejects.toThrow(
 			'Document not found: "nonexistent"',
 		);
@@ -174,7 +174,7 @@ describe("resolveDocumentRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockDocs });
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 
 		// Should fall back to name search and throw "not found"
 		await expect(resolveDocumentRef("abc123")).rejects.toThrow(
@@ -207,7 +207,7 @@ describe("resolveDocumentRef", () => {
 			.mockResolvedValueOnce({ data: page1 }) // first page (100 items)
 			.mockResolvedValueOnce({ data: page2 }); // second page (50 items)
 
-		const { resolveDocumentRef } = await import("./refs.js");
+		const { resolveDocumentRef } = await import("../lib/refs.js");
 		// Search for a doc that's on page 2
 		const result = await resolveDocumentRef("Doc 125");
 
@@ -238,7 +238,7 @@ describe("resolveCollectionRef", () => {
 		const mockCol = { id: "col123", name: "Engineering" };
 		mockApiRequest.mockResolvedValueOnce({ data: mockCol });
 
-		const { resolveCollectionRef } = await import("./refs.js");
+		const { resolveCollectionRef } = await import("../lib/refs.js");
 		const result = await resolveCollectionRef("col123");
 
 		expect(result).toEqual(mockCol);
@@ -257,7 +257,7 @@ describe("resolveCollectionRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockCols });
 
-		const { resolveCollectionRef } = await import("./refs.js");
+		const { resolveCollectionRef } = await import("../lib/refs.js");
 		const result = await resolveCollectionRef("Engineering");
 
 		expect(result).toEqual(mockCols[0]);
@@ -271,7 +271,7 @@ describe("resolveCollectionRef", () => {
 		// "prod" is 4 chars, doesn't look like an ID (needs 6+)
 		mockApiRequest.mockResolvedValueOnce({ data: mockCols });
 
-		const { resolveCollectionRef } = await import("./refs.js");
+		const { resolveCollectionRef } = await import("../lib/refs.js");
 		const result = await resolveCollectionRef("prod");
 
 		expect(result).toEqual(mockCols[1]);
@@ -287,7 +287,7 @@ describe("resolveCollectionRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockCols });
 
-		const { resolveCollectionRef } = await import("./refs.js");
+		const { resolveCollectionRef } = await import("../lib/refs.js");
 		await expect(resolveCollectionRef("engineering")).rejects.toThrow(
 			/Ambiguous Collection reference/,
 		);
@@ -300,7 +300,7 @@ describe("resolveCollectionRef", () => {
 			.mockRejectedValueOnce(new Error("Not found"))
 			.mockResolvedValueOnce({ data: mockCols });
 
-		const { resolveCollectionRef } = await import("./refs.js");
+		const { resolveCollectionRef } = await import("../lib/refs.js");
 		await expect(resolveCollectionRef("nonexistent")).rejects.toThrow(
 			'Collection not found: "nonexistent"',
 		);
@@ -321,7 +321,7 @@ describe("resolveDocumentId", () => {
 		const mockDoc = { id: "doc-id-123", title: "Test", urlId: "test-abc" };
 		mockApiRequest.mockResolvedValueOnce({ data: mockDoc });
 
-		const { resolveDocumentId } = await import("./refs.js");
+		const { resolveDocumentId } = await import("../lib/refs.js");
 		const result = await resolveDocumentId("testabc");
 
 		expect(result).toBe("doc-id-123");
@@ -342,7 +342,7 @@ describe("resolveCollectionId", () => {
 		const mockCol = { id: "col-id-123", name: "Engineering" };
 		mockApiRequest.mockResolvedValueOnce({ data: mockCol });
 
-		const { resolveCollectionId } = await import("./refs.js");
+		const { resolveCollectionId } = await import("../lib/refs.js");
 		const result = await resolveCollectionId("colid123");
 
 		expect(result).toBe("col-id-123");
