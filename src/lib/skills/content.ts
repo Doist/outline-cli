@@ -1,4 +1,4 @@
-export const SKILL_NAME = 'outline'
+export const SKILL_NAME = 'outline-cli'
 export const SKILL_DESCRIPTION =
     'Search and manage Outline wiki documents and collections via the ol CLI'
 
