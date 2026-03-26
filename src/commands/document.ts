@@ -122,6 +122,7 @@ export function registerDocumentCommand(program: Command): void {
         .description('Create a document')
         .requiredOption('--title <title>', 'Document title')
         .requiredOption('--collection <ref>', 'Collection ID or name')
+        .option('--parent <ref>', 'Parent document ID, URL, or name')
         .option('--text <text>', 'Document body (markdown)')
         .option('--file <path>', 'Read markdown from file')
         .option('--publish', 'Publish immediately')
@@ -131,6 +132,10 @@ export function registerDocumentCommand(program: Command): void {
             const body: Record<string, unknown> = {
                 title: opts.title,
                 collectionId,
+            }
+
+            if (opts.parent) {
+                body.parentDocumentId = await resolveDocumentId(opts.parent)
             }
 
             const text = readTextInput(opts)
@@ -195,15 +200,35 @@ export function registerDocumentCommand(program: Command): void {
         })
 
     doc.command('move <id>')
-        .description('Move a document to another collection')
-        .requiredOption('--collection <ref>', 'Target collection ID or name')
+        .description('Move a document to another collection or under a parent')
+        .option('--collection <ref>', 'Target collection ID or name')
+        .option('--parent <ref>', 'Parent document ID, URL, or name')
         .action(async (id: string, opts) => {
+            if (!opts.collection && !opts.parent) {
+                console.error(
+                    formatError(
+                        'MISSING_OPTION',
+                        'At least one of --collection or --parent must be provided.',
+                        [
+                            'Use --collection to move to another collection',
+                            'Use --parent to nest under a parent document',
+                        ],
+                    ),
+                )
+                process.exit(1)
+            }
+
             const resolvedId = await resolveDocumentId(id)
-            const collectionId = await resolveCollectionId(opts.collection)
-            await apiRequest('documents.move', {
-                id: resolvedId,
-                collectionId,
-            })
+            const body: Record<string, unknown> = { id: resolvedId }
+
+            if (opts.collection) {
+                body.collectionId = await resolveCollectionId(opts.collection)
+            }
+            if (opts.parent) {
+                body.parentDocumentId = await resolveDocumentId(opts.parent)
+            }
+
+            await apiRequest('documents.move', body)
             console.log('Moved.')
         })
 
