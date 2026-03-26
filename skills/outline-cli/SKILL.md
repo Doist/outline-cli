@@ -50,13 +50,12 @@ ol doc get <id> --raw                     # Raw markdown
 ol doc get <id> --json
 ol doc open <id>                          # Open in browser
 ol doc create --title "Title" --collection <id> --text "# Content"
-ol doc create --title "Title" --collection <id> --parent <ref>  # Nest under parent
+ol doc create --title "Title" --parent <ref> --text "# Content"  # Nest under parent (collection inferred)
 ol doc create --title "Title" --collection <id> --file ./doc.md
 ol doc update <id> --title "New Title"
 ol doc update <id> --file ./updated.md
-ol doc move <id> --collection <target-id>
-ol doc move <id> --parent <ref>                   # Nest under parent in same collection
-ol doc move <id> --collection <id> --parent <ref>  # Move to collection under parent
+ol doc move <id> --collection <target-id>           # Move to collection root
+ol doc move <id> --parent <ref>                    # Nest under parent (collection inferred)
 ol doc archive <id>
 ol doc unarchive <id>
 ol doc delete <id> --confirm

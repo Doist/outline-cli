@@ -156,15 +156,10 @@ describe('document commands', () => {
         })
     })
 
-    it('document create with --parent includes parentDocumentId', async () => {
+    it('document create with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
         mockApiRequest.mockImplementation((endpoint: string, body: Record<string, unknown>) => {
-            if (endpoint === 'collections.info') {
-                return Promise.resolve({
-                    data: { id: body.id, name: 'Test Collection' },
-                })
-            }
             if (endpoint === 'documents.info') {
                 return Promise.resolve({
                     data: {
@@ -172,6 +167,7 @@ describe('document commands', () => {
                         title: 'Parent',
                         urlId: 'parent-abc',
                         url: '/doc/parent',
+                        collectionId: 'inferred-col',
                     },
                 })
             }
@@ -181,7 +177,7 @@ describe('document commands', () => {
                         id: 'new-id',
                         title: 'Child',
                         urlId: 'child-xyz',
-                        collectionId: 'colABC1',
+                        collectionId: 'inferred-col',
                         updatedAt: '2024-01-01T00:00:00Z',
                     },
                 })
@@ -201,20 +197,51 @@ describe('document commands', () => {
             'create',
             '--title',
             'Child',
-            '--collection',
-            'colABC1',
             '--parent',
             'parentA1',
         ])
 
         expect(mockApiRequest).toHaveBeenCalledWith('documents.create', {
             title: 'Child',
-            collectionId: 'colABC1',
+            collectionId: 'inferred-col',
             parentDocumentId: 'parentA1',
         })
     })
 
-    it('document move with --parent only sends parentDocumentId without collectionId', async () => {
+    it('document create with both --collection and --parent errors', async () => {
+        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+            throw new Error(`process.exit(${code})`)
+        })
+        const errors: string[] = []
+        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+            errors.push(args.join(' '))
+        })
+
+        const { registerDocumentCommand } = await import('../commands/document.js')
+        const program = new Command()
+        program.exitOverride()
+        registerDocumentCommand(program)
+
+        await expect(
+            program.parseAsync([
+                'node',
+                'ol',
+                'document',
+                'create',
+                '--title',
+                'Test',
+                '--collection',
+                'colABC1',
+                '--parent',
+                'parentA1',
+            ]),
+        ).rejects.toThrow('process.exit(1)')
+
+        expect(errors.join(' ')).toContain('mutually exclusive')
+        mockExit.mockRestore()
+    })
+
+    it('document move with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
         mockApiRequest.mockImplementation((endpoint: string, body: Record<string, unknown>) => {
@@ -225,6 +252,7 @@ describe('document commands', () => {
                         title: 'Doc',
                         urlId: 'doc-abc',
                         url: '/doc',
+                        collectionId: 'parent-col',
                     },
                 })
             }
@@ -251,33 +279,18 @@ describe('document commands', () => {
 
         expect(mockApiRequest).toHaveBeenCalledWith('documents.move', {
             id: 'docABC1',
+            collectionId: 'parent-col',
             parentDocumentId: 'parentA1',
         })
     })
 
-    it('document move with --collection and --parent sends both', async () => {
-        const { apiRequest } = await import('../lib/api.js')
-        const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
-        mockApiRequest.mockImplementation((endpoint: string, body: Record<string, unknown>) => {
-            if (endpoint === 'collections.info') {
-                return Promise.resolve({
-                    data: { id: body.id, name: 'Target' },
-                })
-            }
-            if (endpoint === 'documents.info') {
-                return Promise.resolve({
-                    data: {
-                        id: body.id,
-                        title: 'Doc',
-                        urlId: 'doc-abc',
-                        url: '/doc',
-                    },
-                })
-            }
-            if (endpoint === 'documents.move') {
-                return Promise.resolve({ data: {} })
-            }
-            return Promise.reject(new Error(`Unexpected endpoint: ${endpoint}`))
+    it('document move with both --collection and --parent errors', async () => {
+        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+            throw new Error(`process.exit(${code})`)
+        })
+        const errors: string[] = []
+        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+            errors.push(args.join(' '))
         })
 
         const { registerDocumentCommand } = await import('../commands/document.js')
@@ -285,23 +298,22 @@ describe('document commands', () => {
         program.exitOverride()
         registerDocumentCommand(program)
 
-        await program.parseAsync([
-            'node',
-            'ol',
-            'document',
-            'move',
-            'docABC1',
-            '--collection',
-            'colABC1',
-            '--parent',
-            'parentA1',
-        ])
+        await expect(
+            program.parseAsync([
+                'node',
+                'ol',
+                'document',
+                'move',
+                'docABC1',
+                '--collection',
+                'colABC1',
+                '--parent',
+                'parentA1',
+            ]),
+        ).rejects.toThrow('process.exit(1)')
 
-        expect(mockApiRequest).toHaveBeenCalledWith('documents.move', {
-            id: 'docABC1',
-            collectionId: 'colABC1',
-            parentDocumentId: 'parentA1',
-        })
+        expect(errors.join(' ')).toContain('mutually exclusive')
+        mockExit.mockRestore()
     })
 
     it('document move without --collection or --parent errors', async () => {

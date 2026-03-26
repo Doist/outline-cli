@@ -121,21 +121,52 @@ export function registerDocumentCommand(program: Command): void {
     doc.command('create')
         .description('Create a document')
         .requiredOption('--title <title>', 'Document title')
-        .requiredOption('--collection <ref>', 'Collection ID or name')
+        .option('--collection <ref>', 'Collection ID or name')
         .option('--parent <ref>', 'Parent document ID, URL, or name')
         .option('--text <text>', 'Document body (markdown)')
         .option('--file <path>', 'Read markdown from file')
         .option('--publish', 'Publish immediately')
         .option('--json', 'Output JSON')
         .action(async (opts) => {
-            const collectionId = await resolveCollectionId(opts.collection)
+            if (!opts.collection && !opts.parent) {
+                console.error(
+                    formatError(
+                        'MISSING_OPTION',
+                        'Either --collection or --parent must be provided.',
+                        [
+                            'Use --collection to create at a collection root',
+                            'Use --parent to nest under a parent document',
+                        ],
+                    ),
+                )
+                process.exit(1)
+            }
+            if (opts.collection && opts.parent) {
+                console.error(
+                    formatError(
+                        'CONFLICTING_OPTIONS',
+                        '--collection and --parent are mutually exclusive.',
+                        [
+                            'Use --collection to create at a collection root',
+                            'Use --parent to nest under a parent document (collection is inferred)',
+                        ],
+                    ),
+                )
+                process.exit(1)
+            }
+
             const body: Record<string, unknown> = {
                 title: opts.title,
-                collectionId,
+            }
+
+            if (opts.collection) {
+                body.collectionId = await resolveCollectionId(opts.collection)
             }
 
             if (opts.parent) {
-                body.parentDocumentId = await resolveDocumentId(opts.parent)
+                const parent = await resolveDocumentRef(opts.parent)
+                body.parentDocumentId = parent.id
+                body.collectionId = (parent as Document).collectionId
             }
 
             const text = readTextInput(opts)
@@ -208,10 +239,23 @@ export function registerDocumentCommand(program: Command): void {
                 console.error(
                     formatError(
                         'MISSING_OPTION',
-                        'At least one of --collection or --parent must be provided.',
+                        'Either --collection or --parent must be provided.',
                         [
-                            'Use --collection to move to another collection',
+                            'Use --collection to move to a collection root',
                             'Use --parent to nest under a parent document',
+                        ],
+                    ),
+                )
+                process.exit(1)
+            }
+            if (opts.collection && opts.parent) {
+                console.error(
+                    formatError(
+                        'CONFLICTING_OPTIONS',
+                        '--collection and --parent are mutually exclusive.',
+                        [
+                            'Use --collection to move to a collection root',
+                            'Use --parent to nest under a parent document (collection is inferred)',
                         ],
                     ),
                 )
@@ -225,7 +269,9 @@ export function registerDocumentCommand(program: Command): void {
                 body.collectionId = await resolveCollectionId(opts.collection)
             }
             if (opts.parent) {
-                body.parentDocumentId = await resolveDocumentId(opts.parent)
+                const parent = await resolveDocumentRef(opts.parent)
+                body.parentDocumentId = parent.id
+                body.collectionId = (parent as Document).collectionId
             }
 
             await apiRequest('documents.move', body)
