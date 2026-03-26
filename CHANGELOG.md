@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/Doist/outline-cli/compare/v1.0.1...v1.0.2) (2026-03-26)
+
+
+### Bug Fixes
+
+* honor proxy env vars by default ([#33](https://github.com/Doist/outline-cli/issues/33)) ([5bb8e77](https://github.com/Doist/outline-cli/commit/5bb8e77fa8cabe17d2cba478a01c1c64957d7f6b))
+
 ## [1.0.1](https://github.com/Doist/outline-cli/compare/v1.0.0...v1.0.1) (2026-03-25)
 
 
