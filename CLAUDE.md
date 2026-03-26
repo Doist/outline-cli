@@ -48,6 +48,19 @@ Vitest with module mocking. Tests live in `src/__tests__/`. Common patterns:
 - Use `program.exitOverride()` + `program.parseAsync()` to test command parsing
 - Auth tests use tmpdir with `process.pid` for filesystem isolation
 
+## Skill Content (Agent Command Reference)
+
+The file `src/lib/skills/content.ts` exports `SKILL_CONTENT` — a comprehensive command reference that gets installed into AI agent skill directories via `ol skill install`. This is the source of truth that agents use to understand available CLI commands.
+
+**Whenever commands, subcommands, flags, or options are added, updated, or removed in `src/commands/`, the `SKILL_CONTENT` in `src/lib/skills/content.ts` must be updated to match.**
+
+After updating `SKILL_CONTENT`:
+
+1. Run `npm run build && npm run sync:skill` to regenerate `skills/outline-cli/SKILL.md` (the standalone skill file used by `npx skills add`)
+2. Run `ol skill update claude-code` (and any other installed agents) to propagate changes to installed skill files
+
+A CI check (`npm run check:skill-sync`) runs on pull requests and will fail if `skills/outline-cli/SKILL.md` is out of sync with `content.ts`.
+
 ## Style
 
 - Biome: tabs for indentation, auto-sorted imports
