@@ -135,7 +135,7 @@ export function registerDocumentCommand(program: Command): void {
                         'Either --collection or --parent must be provided.',
                         [
                             'Use --collection to create at a collection root',
-                            'Use --parent to nest under a parent document',
+                            'Use --parent to nest under a parent document (collection is inferred)',
                         ],
                     ),
                 )
