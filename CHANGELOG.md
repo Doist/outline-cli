@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/Doist/outline-cli/compare/v1.0.2...v1.1.0) (2026-03-27)
+
+
+### Features
+
+* add --parent option to doc create and doc move ([#41](https://github.com/Doist/outline-cli/issues/41)) ([2514b06](https://github.com/Doist/outline-cli/commit/2514b06e097938b1c0833ea2147509fa0916be28))
+
 ## [1.0.2](https://github.com/Doist/outline-cli/compare/v1.0.1...v1.0.2) (2026-03-26)
 
 
