@@ -270,6 +270,12 @@ export function registerDocumentCommand(program: Command): void {
             }
             if (opts.parent) {
                 const parent = await resolveDocumentRef(opts.parent)
+                if (parent.id === resolvedId) {
+                    console.error(
+                        formatError('INVALID_PARENT', 'A document cannot be its own parent.', []),
+                    )
+                    process.exit(1)
+                }
                 body.parentDocumentId = parent.id
                 body.collectionId = (parent as Document).collectionId
             }

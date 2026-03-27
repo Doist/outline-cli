@@ -338,6 +338,53 @@ describe('document commands', () => {
         expect(errors.join(' ')).toContain('--parent')
         mockExit.mockRestore()
     })
+
+    it('document move with --parent pointing to itself errors', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+        mockApiRequest.mockImplementation((endpoint: string) => {
+            if (endpoint === 'documents.info') {
+                return Promise.resolve({
+                    data: {
+                        id: 'sameDoc1',
+                        title: 'Doc',
+                        urlId: 'doc-abc',
+                        url: '/doc',
+                        collectionId: 'col-1',
+                    },
+                })
+            }
+            return Promise.reject(new Error(`Unexpected endpoint: ${endpoint}`))
+        })
+
+        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+            throw new Error(`process.exit(${code})`)
+        })
+        const errors: string[] = []
+        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+            errors.push(args.join(' '))
+        })
+
+        const { registerDocumentCommand } = await import('../commands/document.js')
+        const program = new Command()
+        program.exitOverride()
+        registerDocumentCommand(program)
+
+        await expect(
+            program.parseAsync([
+                'node',
+                'ol',
+                'document',
+                'move',
+                'sameDoc1',
+                '--parent',
+                'sameDoc1',
+            ]),
+        ).rejects.toThrow('process.exit(1)')
+
+        expect(errors.join(' ')).toContain('cannot be its own parent')
+        mockExit.mockRestore()
+    })
 })
 
 describe('collection commands', () => {
