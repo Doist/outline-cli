@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/Doist/outline-cli/compare/v1.1.0...v1.2.0) (2026-03-30)
+
+### Features
+
+* Announce releases on Twist ([#44](https://github.com/Doist/outline-cli/issues/44)) ([5e2f86b](https://github.com/Doist/outline-cli/commit/5e2f86b9bf20ca97b50df74f0552028b6f6b94b2))
+
 # [1.1.0](https://github.com/Doist/outline-cli/compare/v1.0.2...v1.1.0) (2026-03-27)
 
 
