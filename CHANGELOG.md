@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/Doist/outline-cli/compare/v1.2.0...v1.2.1) (2026-03-31)
+
+### Bug Fixes
+
+* Capture previous tag before release ([#45](https://github.com/Doist/outline-cli/issues/45)) ([6a00294](https://github.com/Doist/outline-cli/commit/6a002949587a17313f96bc2fb1a93fba7e605e9b))
+
 ## [1.2.0](https://github.com/Doist/outline-cli/compare/v1.1.0...v1.2.0) (2026-03-30)
 
 ### Features
