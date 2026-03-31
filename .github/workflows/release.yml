@@ -67,6 +67,10 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            - name: Capture previous tag
+              id: previous_tag
+              run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
             - name: Release
               run: npx semantic-release
               env:
@@ -75,10 +79,6 @@ jobs:
                   GIT_AUTHOR_EMAIL: ${{ steps.bot_user.outputs.id }}+${{ steps.generate_token.outputs.app-slug }}[bot]@users.noreply.github.com
                   GIT_COMMITTER_NAME: ${{ steps.generate_token.outputs.app-slug }}[bot]
                   GIT_COMMITTER_EMAIL: ${{ steps.bot_user.outputs.id }}+${{ steps.generate_token.outputs.app-slug }}[bot]@users.noreply.github.com
-
-            - name: Capture previous tag
-              id: previous_tag
-              run: echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
             - name: Derive release announcement
               id: announcement
