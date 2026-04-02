@@ -42,8 +42,9 @@ function isNewer(current: string, candidate: string): boolean {
     if (!a.prerelease && b.prerelease) return false
     if (a.prerelease && !b.prerelease) return true
 
-    // Both pre-release: lexicographic (handles "next.1" vs "next.2" etc.)
-    if (a.prerelease && b.prerelease) return b.prerelease > a.prerelease
+    // Both pre-release: numeric-aware comparison (handles "next.10" > "next.2" etc.)
+    if (a.prerelease && b.prerelease)
+        return b.prerelease.localeCompare(a.prerelease, undefined, { numeric: true }) > 0
     return false
 }
 
@@ -59,7 +60,7 @@ async function fetchVersion(channel: UpdateChannel): Promise<string> {
 }
 
 function detectPackageManager(): string {
-    const execPath = process.env.npm_execpath || ''
+    const execPath = process.env.npm_execpath || process.argv[1] || ''
     if (execPath.includes('pnpm')) return 'pnpm'
     return 'npm'
 }
