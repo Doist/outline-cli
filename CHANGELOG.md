@@ -1,3 +1,9 @@
+## [1.5.1](https://github.com/Doist/outline-cli/compare/v1.5.0...v1.5.1) (2026-04-02)
+
+### Bug Fixes
+
+* secure config permissions and address update channel review feedback ([#53](https://github.com/Doist/outline-cli/issues/53)) ([63e64f8](https://github.com/Doist/outline-cli/commit/63e64f8b3e54251b74c11f8cbf100339422d43dc))
+
 ## [1.5.0](https://github.com/Doist/outline-cli/compare/v1.4.0...v1.5.0) (2026-04-02)
 
 ### Features
