@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -32,6 +32,10 @@ export function setUpdateChannel(channel: UpdateChannel): void {
         }
     }
     existing.update_channel = channel
-    mkdirSync(CONFIG_DIR, { recursive: true })
-    writeFileSync(CONFIG_PATH, `${JSON.stringify(existing, null, 2)}\n`)
+    mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 })
+    writeFileSync(CONFIG_PATH, `${JSON.stringify(existing, null, 2)}\n`, {
+        encoding: 'utf-8',
+        mode: 0o600,
+    })
+    chmodSync(CONFIG_PATH, 0o600)
 }

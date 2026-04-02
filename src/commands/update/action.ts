@@ -115,12 +115,16 @@ export async function updateAction(options: { check?: boolean }): Promise<void> 
                 ? `  Channel: ${chalk.magenta('pre-release')}`
                 : `  Channel: ${chalk.green('stable')}`
 
-        if (updateAvailable) {
+        if (currentVersion === latestVersion) {
+            console.log(chalk.green('✓'), `Already up to date (v${currentVersion})`)
+        } else if (updateAvailable) {
             console.log(
                 `Update available: ${chalk.dim(`v${currentVersion}`)} → ${chalk.green(`v${latestVersion}`)}`,
             )
         } else {
-            console.log(chalk.green('✓'), `Already up to date (v${currentVersion})`)
+            console.log(
+                `Downgrade available: ${chalk.dim(`v${currentVersion}`)} → ${chalk.yellow(`v${latestVersion}`)}`,
+            )
         }
         console.log(channelLine)
         return
@@ -137,8 +141,7 @@ export async function updateAction(options: { check?: boolean }): Promise<void> 
         )
     } else {
         console.log(
-            chalk.yellow('Note:'),
-            `v${latestVersion}${label} is older than your current v${currentVersion}`,
+            `Downgrade available${label}: ${chalk.dim(`v${currentVersion}`)} → ${chalk.yellow(`v${latestVersion}`)}`,
         )
     }
 
