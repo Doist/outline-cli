@@ -6,7 +6,7 @@ import { registerCollectionCommand } from './commands/collection.js'
 import { registerDocumentCommand } from './commands/document.js'
 import { registerSearchCommand } from './commands/search.js'
 import { registerSkillCommand } from './commands/skill.js'
-import { registerUpdateCommand } from './commands/update.js'
+import { registerUpdateCommand } from './commands/update/index.js'
 
 const program = new Command()
 
