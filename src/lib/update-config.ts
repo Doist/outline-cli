@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -37,4 +37,5 @@ export function setUpdateChannel(channel: UpdateChannel): void {
         encoding: 'utf-8',
         mode: 0o600,
     })
+    chmodSync(CONFIG_PATH, 0o600)
 }
