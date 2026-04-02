@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
 import { registerAuthCommand } from './commands/auth.js'
+import { registerChangelogCommand } from './commands/changelog.js'
 import { registerCollectionCommand } from './commands/collection.js'
 import { registerDocumentCommand } from './commands/document.js'
 import { registerSearchCommand } from './commands/search.js'
@@ -27,6 +28,7 @@ registerSearchCommand(program)
 registerDocumentCommand(program)
 registerCollectionCommand(program)
 registerSkillCommand(program)
+registerChangelogCommand(program)
 registerUpdateCommand(program)
 
 program.parseAsync().catch((err: Error) => {
