@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import { Command } from 'commander'
 import packageJson from '../../package.json' with { type: 'json' }
 import { withSpinner } from '../lib/spinner.js'
+import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 
 const PACKAGE_NAME = '@doist/outline-cli'
 const REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`
@@ -12,7 +13,7 @@ interface RegistryResponse {
 }
 
 async function fetchLatestVersion(): Promise<string> {
-    const response = await fetch(REGISTRY_URL)
+    const response = await fetchWithRetry({ url: REGISTRY_URL })
     if (!response.ok) {
         throw new Error(`Registry request failed (HTTP ${response.status})`)
     }
@@ -30,7 +31,8 @@ function runInstall(pm: string): Promise<{ exitCode: number; stderr: string }> {
     const command = pm === 'pnpm' ? 'add' : 'install'
     return new Promise((resolve, reject) => {
         const child = spawn(pm, [command, '-g', `${PACKAGE_NAME}@latest`], {
-            stdio: 'pipe',
+            stdio: ['ignore', 'ignore', 'pipe'],
+            shell: process.platform === 'win32',
         })
 
         let stderr = ''

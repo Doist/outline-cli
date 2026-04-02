@@ -11,6 +11,11 @@ vi.mock('../lib/spinner.js', () => ({
     withSpinner: vi.fn((_opts: unknown, fn: () => Promise<unknown>) => fn()),
 }))
 
+// Mock fetchWithRetry to use global fetch (which we stub per-test)
+vi.mock('../transport/fetch-with-retry.js', () => ({
+    fetchWithRetry: vi.fn(({ url }: { url: string }) => fetch(url)),
+}))
+
 import { spawn } from 'node:child_process'
 import { registerUpdateCommand } from '../commands/update.js'
 
@@ -155,7 +160,7 @@ describe('update command', () => {
             expect(mockSpawn).toHaveBeenCalledWith(
                 'npm',
                 ['install', '-g', '@doist/outline-cli@latest'],
-                { stdio: 'pipe' },
+                { stdio: ['ignore', 'ignore', 'pipe'], shell: process.platform === 'win32' },
             )
             expect(consoleSpy).toHaveBeenCalledWith(
                 expect.anything(),
@@ -174,7 +179,7 @@ describe('update command', () => {
             expect(mockSpawn).toHaveBeenCalledWith(
                 'pnpm',
                 ['add', '-g', '@doist/outline-cli@latest'],
-                { stdio: 'pipe' },
+                { stdio: ['ignore', 'ignore', 'pipe'], shell: process.platform === 'win32' },
             )
         })
     })
