@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/Doist/outline-cli/compare/v1.3.0...v1.4.0) (2026-04-02)
+
+### Features
+
+* add `ol changelog` command ([#50](https://github.com/Doist/outline-cli/issues/50)) ([60656e5](https://github.com/Doist/outline-cli/commit/60656e5d816af6080f5084e3f44d0d9763e6c354))
+
 ## [1.3.0](https://github.com/Doist/outline-cli/compare/v1.2.1...v1.3.0) (2026-04-02)
 
 ### Features
