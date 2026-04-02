@@ -329,6 +329,17 @@ describe('update command', () => {
             expect(mockSpawn).not.toHaveBeenCalled()
         })
 
+        it('treats next.10 as newer than next.2 (multi-digit prerelease)', async () => {
+            mockFetch('1.6.0-next.10')
+            mockSpawnSuccess()
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update'])
+
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Update available'))
+            expect(mockSpawn).toHaveBeenCalled()
+        })
+
         it('warns but still installs when channel tag resolves to older version', async () => {
             mockFetch('1.4.0-next.1')
             mockSpawnSuccess()
