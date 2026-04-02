@@ -32,6 +32,9 @@ export function setUpdateChannel(channel: UpdateChannel): void {
         }
     }
     existing.update_channel = channel
-    mkdirSync(CONFIG_DIR, { recursive: true })
-    writeFileSync(CONFIG_PATH, `${JSON.stringify(existing, null, 2)}\n`)
+    mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 })
+    writeFileSync(CONFIG_PATH, `${JSON.stringify(existing, null, 2)}\n`, {
+        encoding: 'utf-8',
+        mode: 0o600,
+    })
 }
