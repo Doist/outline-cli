@@ -79,10 +79,13 @@ ol auth logout                # Clear saved credentials
 
 ### Update & Changelog
 \`\`\`bash
-ol update                     # Update to the latest version
-ol update --check             # Check for updates without installing
-ol changelog                  # Show recent changelog entries
-ol changelog -n 3             # Show last 3 versions
+ol update                        # Update CLI to latest version
+ol update --check                # Check for updates without installing, show channel
+ol update channel                # Show current update channel
+ol update switch --stable        # Switch to stable release channel
+ol update switch --pre-release   # Switch to pre-release (next) channel
+ol changelog                     # Show recent changelog entries
+ol changelog -n 3                # Show last 3 versions
 \`\`\`
 
 ## Examples

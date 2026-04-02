@@ -16,10 +16,19 @@ vi.mock('../transport/fetch-with-retry.js', () => ({
     fetchWithRetry: vi.fn(({ url }: { url: string }) => fetch(url)),
 }))
 
+// Mock update-config module
+vi.mock('../lib/update-config.js', () => ({
+    getUpdateChannel: vi.fn().mockReturnValue('stable'),
+    setUpdateChannel: vi.fn(),
+}))
+
 import { spawn } from 'node:child_process'
-import { registerUpdateCommand } from '../commands/update.js'
+import { registerUpdateCommand } from '../commands/update/index.js'
+import { getUpdateChannel, setUpdateChannel } from '../lib/update-config.js'
 
 const mockSpawn = vi.mocked(spawn)
+const mockGetUpdateChannel = vi.mocked(getUpdateChannel)
+const mockSetUpdateChannel = vi.mocked(setUpdateChannel)
 
 function createProgram() {
     const program = new Command()
@@ -95,6 +104,9 @@ describe('update command', () => {
         consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
         consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
         process.exitCode = undefined
+        mockGetUpdateChannel.mockReturnValue('stable')
+        mockSpawn.mockClear()
+        mockSetUpdateChannel.mockClear()
     })
 
     afterEach(() => {
@@ -146,6 +158,27 @@ describe('update command', () => {
                 expect.anything(),
                 expect.stringContaining('Already up to date'),
             )
+        })
+
+        it('shows channel info', async () => {
+            mockFetch('99.99.99')
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', '--check'])
+
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Channel:'))
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('stable'))
+        })
+
+        it('shows pre-release channel when configured', async () => {
+            mockGetUpdateChannel.mockReturnValue('pre-release')
+            mockFetch('1.5.0-next.1')
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', '--check'])
+
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Channel:'))
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pre-release'))
         })
     })
 
@@ -240,6 +273,152 @@ describe('update command', () => {
                 expect.stringContaining('exited with code 1'),
             )
             expect(process.exitCode).toBe(1)
+        })
+    })
+
+    describe('pre-release channel', () => {
+        beforeEach(() => {
+            mockGetUpdateChannel.mockReturnValue('pre-release')
+        })
+
+        it('fetches from next registry URL', async () => {
+            mockFetch('1.5.0-next.1')
+            mockSpawnSuccess()
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update'])
+
+            expect(fetch).toHaveBeenCalledWith('https://registry.npmjs.org/@doist/outline-cli/next')
+        })
+
+        it('installs with @next tag', async () => {
+            mockFetch('1.5.0-next.1')
+            mockSpawnSuccess()
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update'])
+
+            expect(mockSpawn).toHaveBeenCalledWith(
+                'npm',
+                ['install', '-g', '@doist/outline-cli@next'],
+                { stdio: ['ignore', 'ignore', 'pipe'], shell: process.platform === 'win32' },
+            )
+        })
+
+        it('does not suggest ol changelog after pre-release update', async () => {
+            mockFetch('1.5.0-next.1')
+            mockSpawnSuccess()
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update'])
+
+            expect(consoleSpy).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('ol changelog'),
+                expect.anything(),
+            )
+        })
+
+        it('--check respects pre-release channel', async () => {
+            mockFetch('1.5.0-next.1')
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', '--check'])
+
+            expect(fetch).toHaveBeenCalledWith('https://registry.npmjs.org/@doist/outline-cli/next')
+            expect(mockSpawn).not.toHaveBeenCalled()
+        })
+
+        it('warns but still installs when channel tag resolves to older version', async () => {
+            mockFetch('1.4.0-next.1')
+            mockSpawnSuccess()
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update'])
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('older than your current'),
+            )
+            expect(mockSpawn).toHaveBeenCalledWith(
+                'npm',
+                ['install', '-g', '@doist/outline-cli@next'],
+                { stdio: ['ignore', 'ignore', 'pipe'], shell: process.platform === 'win32' },
+            )
+        })
+    })
+
+    describe('switch subcommand', () => {
+        it('sets channel to stable', async () => {
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', 'switch', '--stable'])
+
+            expect(mockSetUpdateChannel).toHaveBeenCalledWith('stable')
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('stable'),
+            )
+        })
+
+        it('sets channel to pre-release with warning', async () => {
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', 'switch', '--pre-release'])
+
+            expect(mockSetUpdateChannel).toHaveBeenCalledWith('pre-release')
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('pre-release'),
+            )
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Remember to switch back'),
+            )
+        })
+
+        it('errors when both flags provided', async () => {
+            const program = createProgram()
+            await program.parseAsync([
+                'node',
+                'ol',
+                'update',
+                'switch',
+                '--stable',
+                '--pre-release',
+            ])
+
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('not both'),
+            )
+            expect(process.exitCode).toBe(1)
+        })
+
+        it('errors when no flag provided', async () => {
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', 'switch'])
+
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('--stable or --pre-release'),
+            )
+            expect(process.exitCode).toBe(1)
+        })
+    })
+
+    describe('channel subcommand', () => {
+        it('shows stable when no config set', async () => {
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', 'channel'])
+
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('stable'))
+        })
+
+        it('shows pre-release when configured', async () => {
+            mockGetUpdateChannel.mockReturnValue('pre-release')
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', 'channel'])
+
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pre-release'))
         })
     })
 })
