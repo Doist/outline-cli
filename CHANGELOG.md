@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/Doist/outline-cli/compare/v1.2.1...v1.3.0) (2026-04-02)
+
+### Features
+
+* add `ol update` command ([#49](https://github.com/Doist/outline-cli/issues/49)) ([fa5608e](https://github.com/Doist/outline-cli/commit/fa5608ea50392a71150f7d1140204f0160680d8a))
+
 ## [1.2.1](https://github.com/Doist/outline-cli/compare/v1.2.0...v1.2.1) (2026-03-31)
 
 ### Bug Fixes
