@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/Doist/outline-cli/compare/v1.4.0...v1.5.0) (2026-04-02)
+
+### Features
+
+* allow switching between stable and pre-release update channels ([#52](https://github.com/Doist/outline-cli/issues/52)) ([6834688](https://github.com/Doist/outline-cli/commit/683468819423e93b3f1ca8b38af9ce6788a2e675))
+
 ## [1.4.0](https://github.com/Doist/outline-cli/compare/v1.3.0...v1.4.0) (2026-04-02)
 
 ### Features
