@@ -55,13 +55,13 @@ function cleanChangelog(text: string): string {
             // Clean up blank lines left by removed dep lines
             .replace(/\n{3,}/g, '\n\n')
             // Remove section headers left empty after filtering (e.g. ### Bug Fixes with no items)
-            .replace(/### [\w ]+\n\n(?=##|$)/gm, '')
+            .replace(/### [\w ]+\n\n(?=#|$)/gm, '')
     )
 }
 
 function parseChangelog(content: string, count: number): { text: string; hasMore: boolean } {
-    const sections = content.split(/\n(?=## \[)/)
-    const versionSections = sections.filter((s) => s.startsWith('## ['))
+    const sections = content.split(/\n(?=## (?:\d|\[))/)
+    const versionSections = sections.filter((s) => /^## (?:\d|\[)/.test(s))
     const selected = versionSections.slice(0, count)
 
     if (selected.length === 0) {
@@ -79,8 +79,8 @@ interface ChangelogOptions {
 }
 
 export async function changelogAction(options: ChangelogOptions): Promise<void> {
-    const count = parseInt(options.count, 10)
-    if (isNaN(count) || count < 1) {
+    const count = Number(options.count)
+    if (!Number.isInteger(count) || count < 1) {
         console.error(chalk.red('Error:'), 'Count must be a positive number')
         process.exitCode = 1
         return
