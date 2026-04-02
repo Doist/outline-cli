@@ -77,6 +77,14 @@ ol auth status                # Show current auth state
 ol auth logout                # Clear saved credentials
 \`\`\`
 
+### Update & Changelog
+\`\`\`bash
+ol update                     # Update to the latest version
+ol update --check             # Check for updates without installing
+ol changelog                  # Show recent changelog entries
+ol changelog -n 3             # Show last 3 versions
+\`\`\`
+
 ## Examples
 
 ### Find and read a document

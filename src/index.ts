@@ -5,6 +5,7 @@ import { registerCollectionCommand } from './commands/collection.js'
 import { registerDocumentCommand } from './commands/document.js'
 import { registerSearchCommand } from './commands/search.js'
 import { registerSkillCommand } from './commands/skill.js'
+import { registerUpdateCommand } from './commands/update.js'
 
 const program = new Command()
 
@@ -26,6 +27,7 @@ registerSearchCommand(program)
 registerDocumentCommand(program)
 registerCollectionCommand(program)
 registerSkillCommand(program)
+registerUpdateCommand(program)
 
 program.parseAsync().catch((err: Error) => {
     console.error(err.message)
