@@ -412,21 +412,43 @@ describe('update command', () => {
         })
     })
 
-    describe('channel subcommand', () => {
+    describe('--channel flag', () => {
         it('shows stable when no config set', async () => {
             const program = createProgram()
-            await program.parseAsync(['node', 'ol', 'update', 'channel'])
+            await program.parseAsync(['node', 'ol', 'update', '--channel'])
 
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('stable'))
+            expect(mockSpawn).not.toHaveBeenCalled()
         })
 
         it('shows pre-release when configured', async () => {
             mockGetUpdateChannel.mockReturnValue('pre-release')
 
             const program = createProgram()
-            await program.parseAsync(['node', 'ol', 'update', 'channel'])
+            await program.parseAsync(['node', 'ol', 'update', '--channel'])
 
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('pre-release'))
+            expect(mockSpawn).not.toHaveBeenCalled()
+        })
+
+        it('does not fetch from registry', async () => {
+            mockFetch('99.99.99')
+
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', '--channel'])
+
+            expect(fetch).not.toHaveBeenCalled()
+        })
+
+        it('errors when combined with --check', async () => {
+            const program = createProgram()
+            await program.parseAsync(['node', 'ol', 'update', '--check', '--channel'])
+
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.stringContaining('not both'),
+            )
+            expect(process.exitCode).toBe(1)
         })
     })
 })
