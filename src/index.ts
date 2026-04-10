@@ -7,12 +7,13 @@ import { registerDocumentCommand } from './commands/document.js'
 import { registerSearchCommand } from './commands/search.js'
 import { registerSkillCommand } from './commands/skill.js'
 import { registerUpdateCommand } from './commands/update/index.js'
+import packageJson from '../package.json' with { type: 'json' }
 
 const program = new Command()
 
 program
     .name('ol')
-    .version('0.1.0')
+    .version(packageJson.version)
     .description('CLI for the Outline wiki/knowledge base API')
     .option('--no-spinner', 'Disable loading animations')
     .addHelpText(
