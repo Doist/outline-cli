@@ -56,9 +56,14 @@ async function rawApiRequest<T>(
 	const baseUrl = getBaseUrl();
 	const token = getApiToken();
 
+	// `Accept-Encoding: identity` opts out of response compression. On Node 24+,
+	// global `fetch` can return raw gzipped bytes that fail `res.json()` parsing
+	// ("Unexpected token '...' is not valid JSON"). Asking the server for an
+	// uncompressed payload sidesteps the issue across Node versions.
 	const res = await fetch(`${baseUrl}/api/${path}`, {
 		method: "POST",
 		headers: {
+			"Accept-Encoding": "identity",
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${token}`,
 		},

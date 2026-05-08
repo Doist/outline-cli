@@ -29,6 +29,7 @@ describe("apiRequest", () => {
 			{
 				method: "POST",
 				headers: {
+					"Accept-Encoding": "identity",
 					"Content-Type": "application/json",
 					Authorization: "Bearer test-token",
 				},
