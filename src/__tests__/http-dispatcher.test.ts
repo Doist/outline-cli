@@ -166,4 +166,61 @@ describe('suppressExperimentalWarningsSync', () => {
         const result = suppressExperimentalWarningsSync(() => 42)
         expect(result).toBe(42)
     })
+
+    it('throws if the callback returns a thenable (sync-only contract)', async () => {
+        const { suppressExperimentalWarningsSync } = await import('../transport/http-dispatcher.js')
+
+        // Cast through `unknown` — the public type rejects async callbacks at
+        // compile time; this exercises the runtime defence-in-depth.
+        const asyncCallback = (() => Promise.resolve(1)) as unknown as () => SyncReturn
+
+        expect(() => suppressExperimentalWarningsSync(asyncCallback)).toThrow(/thenable/)
+    })
 })
+
+describe('http-dispatcher integration with decompress interceptor', () => {
+    afterEach(async () => {
+        const { resetDefaultDispatcherForTests } = await import('../transport/http-dispatcher.js')
+        await resetDefaultDispatcherForTests()
+        vi.doUnmock('undici')
+        vi.resetModules()
+    })
+
+    it('does not forward ExperimentalWarning emitted from interceptors.decompress during dispatcher creation', async () => {
+        const emitSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {})
+
+        vi.doMock('undici', async () => {
+            const actual = await vi.importActual<typeof import('undici')>('undici')
+            return {
+                ...actual,
+                interceptors: {
+                    ...actual.interceptors,
+                    decompress: () => {
+                        // Simulate undici's experimental warning being emitted
+                        // synchronously at compose time — this is the exact
+                        // shape `getDefaultDispatcher()` must suppress.
+                        process.emitWarning(
+                            'mock decompress experimental warning',
+                            'ExperimentalWarning',
+                        )
+                        return actual.interceptors.decompress()
+                    },
+                },
+            }
+        })
+
+        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
+        const dispatcher = getDefaultDispatcher()
+        expect(dispatcher).toBeDefined()
+
+        const experimentalCalls = emitSpy.mock.calls.filter(
+            (args) => args[1] === 'ExperimentalWarning',
+        )
+        expect(experimentalCalls).toEqual([])
+    })
+})
+
+// Helper type for the runtime-guard test above — `SyncOnly<Promise<...>>` is
+// `never`, so the public signature already rejects async callbacks; the test
+// reaches the runtime check via a deliberate `unknown` cast.
+type SyncReturn = number

@@ -62,34 +62,55 @@ export async function resetDefaultDispatcherForTests(): Promise<void> {
 // implementation detail (not a stable API), and the suppression window is
 // narrow enough that a coarse type filter is safe.
 //
+// `SyncOnly<T>` rejects promise-returning callbacks at the type level so the
+// helper can't be misused with `async`/promise-returning code (which would
+// restore `process.emitWarning` before the awaited work runs and silently
+// violate the suppression contract). A runtime guard catches any callable
+// that slips past the type check.
+//
 // Exported for direct unit testing — the integration path through
-// `getDefaultDispatcher()` cannot reliably exercise the helper because both
-// the dispatcher singleton and undici's internal `warningEmitted` flag are
-// once-per-process.
-export function suppressExperimentalWarningsSync<T>(fn: () => T): T {
+// `getDefaultDispatcher()` cannot reliably exercise the helper a second time
+// because both the dispatcher singleton and undici's internal `warningEmitted`
+// flag are once-per-process.
+type SyncOnly<T> = T extends PromiseLike<unknown> ? never : T
+
+export function suppressExperimentalWarningsSync<T>(fn: () => SyncOnly<T>): SyncOnly<T> {
     const originalEmit = process.emitWarning
-    process.emitWarning = ((
-        warning: string | Error,
-        typeOrOptions?: string | { type?: string },
-        ...rest: unknown[]
-    ): void => {
+    type EmitArgs = Parameters<typeof process.emitWarning>
+
+    const filteredEmit = ((...args: EmitArgs): void => {
+        const typeOrOptions = args[1]
         const type =
             typeof typeOrOptions === 'string'
                 ? typeOrOptions
-                : typeof typeOrOptions === 'object' && typeOrOptions !== null
-                  ? typeOrOptions.type
+                : typeof typeOrOptions === 'object' &&
+                    typeOrOptions !== null &&
+                    'type' in typeOrOptions
+                  ? (typeOrOptions as { type?: string }).type
                   : undefined
         if (type === 'ExperimentalWarning') return
-        ;(originalEmit as (...args: unknown[]) => void).call(
-            process,
-            warning,
-            typeOrOptions,
-            ...rest,
-        )
+        Reflect.apply(originalEmit, process, args)
     }) as typeof process.emitWarning
+
+    process.emitWarning = filteredEmit
     try {
-        return fn()
+        const result = fn()
+        if (isThenable(result)) {
+            throw new Error(
+                'suppressExperimentalWarningsSync: callback returned a thenable; this helper only supports synchronous work.',
+            )
+        }
+        return result
     } finally {
         process.emitWarning = originalEmit
     }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'then' in value &&
+        typeof (value as { then: unknown }).then === 'function'
+    )
 }
