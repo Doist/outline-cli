@@ -1,3 +1,9 @@
+## [1.5.2](https://github.com/Doist/outline-cli/compare/v1.5.1...v1.5.2) (2026-05-09)
+
+### Bug Fixes
+
+* decompress gzipped responses on Node 24+ (undici 7) ([#63](https://github.com/Doist/outline-cli/issues/63)) ([c44fbea](https://github.com/Doist/outline-cli/commit/c44fbeaafa13489505e70d1f829454982f24e07d))
+
 ## [1.5.1](https://github.com/Doist/outline-cli/compare/v1.5.0...v1.5.1) (2026-04-02)
 
 ### Bug Fixes
