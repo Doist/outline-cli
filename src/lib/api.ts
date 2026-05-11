@@ -47,19 +47,31 @@ export interface PaginatedResult<T> {
     pagination?: Pagination
 }
 
+export interface ApiRequestOverrides {
+    token?: string
+    baseUrl?: string
+}
+
 /**
  * Core API request function without spinner wrapping.
  */
-async function rawApiRequest<T>(path: string, body: object = {}): Promise<PaginatedResult<T>> {
-    const [baseUrl, token] = await Promise.all([getBaseUrl(), getApiToken()])
+async function rawApiRequest<T>(
+    path: string,
+    body: object = {},
+    overrides: ApiRequestOverrides = {},
+): Promise<PaginatedResult<T>> {
+    const [resolvedBaseUrl, resolvedToken] = await Promise.all([
+        overrides.baseUrl ? Promise.resolve(overrides.baseUrl.replace(/\/$/, '')) : getBaseUrl(),
+        overrides.token ? Promise.resolve(overrides.token) : getApiToken(),
+    ])
 
     const res = await fetchWithRetry({
-        url: `${baseUrl}/api/${path}`,
+        url: `${resolvedBaseUrl}/api/${path}`,
         options: {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${resolvedToken}`,
             },
             body: JSON.stringify(body),
         },
@@ -82,11 +94,15 @@ async function rawApiRequest<T>(path: string, body: object = {}): Promise<Pagina
  * Public API request function that wraps rawApiRequest with automatic spinners.
  * Spinner messages are configured per API path in API_SPINNER_CONFIG.
  */
-export async function apiRequest<T>(path: string, body: object = {}): Promise<PaginatedResult<T>> {
+export async function apiRequest<T>(
+    path: string,
+    body: object = {},
+    overrides: ApiRequestOverrides = {},
+): Promise<PaginatedResult<T>> {
     const spinnerConfig = API_SPINNER_CONFIG[path] ?? {
         text: 'Loading...',
         color: 'blue' as const,
     }
 
-    return withSpinner(spinnerConfig, () => rawApiRequest<T>(path, body))
+    return withSpinner(spinnerConfig, () => rawApiRequest<T>(path, body, overrides))
 }

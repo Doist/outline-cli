@@ -55,9 +55,11 @@ export async function saveConfig(
  */
 export async function clearConfig(): Promise<void> {
     const existing = await getConfig()
-    const { api_token, base_url, oauth_client_id, ...rest } = existing
+    const { api_token, base_url, oauth_client_id, auth_user_id, auth_user_name, ...rest } = existing
     void api_token
     void base_url
     void oauth_client_id
+    void auth_user_id
+    void auth_user_name
     await setConfig(rest as Config)
 }
