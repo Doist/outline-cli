@@ -1,7 +1,7 @@
 import { formatJson, formatNdjson, printEmpty, type ViewOptions } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
-import type { BaseCliError, ErrorType } from './errors.js'
+import { BaseCliError } from './errors.js'
 
 type AnyCliError = BaseCliError<string>
 
@@ -82,20 +82,15 @@ function pick<T extends object>(obj: T, keys: (keyof T)[]): Partial<T> {
     return result
 }
 
-function resolveErrorParts(
+function toCliError(
     codeOrError: string | AnyCliError,
     message?: string,
     hints?: string[],
-): { code: string; message: string; hints: string[] | undefined; type: ErrorType } {
+): AnyCliError {
     if (typeof codeOrError === 'string') {
-        return { code: codeOrError, message: message ?? '', hints, type: 'error' }
+        return new BaseCliError(codeOrError, message ?? '', { hints })
     }
-    return {
-        code: codeOrError.code,
-        message: codeOrError.message,
-        hints: codeOrError.hints,
-        type: codeOrError.type ?? 'error',
-    }
+    return codeOrError
 }
 
 export function formatError(error: AnyCliError): string
@@ -105,11 +100,11 @@ export function formatError(
     message?: string,
     hints?: string[],
 ): string {
-    const { code, message: msg, hints: h } = resolveErrorParts(codeOrError, message, hints)
-    const lines = [`Error: ${code}`, msg]
-    if (h && h.length > 0) {
+    const err = toCliError(codeOrError, message, hints)
+    const lines = [`Error: ${err.code}`, err.message]
+    if (err.hints && err.hints.length > 0) {
         lines.push('')
-        for (const hint of h) {
+        for (const hint of err.hints) {
             lines.push(`  - ${hint}`)
         }
     }
@@ -123,6 +118,6 @@ export function formatErrorJson(
     message?: string,
     hints?: string[],
 ): string {
-    const { code, message: msg, hints: h } = resolveErrorParts(codeOrError, message, hints)
-    return JSON.stringify({ error: { code, message: msg, hints: h } })
+    const err = toCliError(codeOrError, message, hints)
+    return JSON.stringify({ error: { code: err.code, message: err.message, hints: err.hints } })
 }

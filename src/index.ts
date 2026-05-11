@@ -18,9 +18,6 @@ program
     .name('ol')
     .version(packageJson.version)
     .description('CLI for the Outline wiki/knowledge base API')
-    .enablePositionalOptions()
-    .option('--json', 'Output JSON (subcommand results or errors)')
-    .option('--ndjson', 'Output NDJSON')
     .option('--no-spinner', 'Disable loading animations')
     .option('--accessible', 'Render output in screen-reader-friendly mode')
     .addHelpText(

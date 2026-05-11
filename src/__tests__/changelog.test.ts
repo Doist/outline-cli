@@ -1,65 +1,42 @@
+import { basename } from 'node:path'
 import { Command } from 'commander'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('node:fs/promises')
+const { registerCoreChangelogCommand } = vi.hoisted(() => ({
+    registerCoreChangelogCommand: vi.fn(),
+}))
 
-import { readFile } from 'node:fs/promises'
+vi.mock('@doist/cli-core/commands', () => ({
+    registerChangelogCommand: registerCoreChangelogCommand,
+}))
+
 import packageJson from '../../package.json' with { type: 'json' }
 import { registerChangelogCommand } from '../commands/changelog.js'
 
-const mockReadFile = vi.mocked(readFile)
-
-const SAMPLE_CHANGELOG = `# Changelog
-
-## [9.9.0](https://example.com) (2026-05-10)
-
-### Features
-
-* delegated to cli-core
-
-## [9.8.0](https://example.com) (2026-05-09)
-
-### Features
-
-* prior release
-`
-
 describe('changelog wrapper', () => {
-    let logSpy: ReturnType<typeof vi.spyOn>
-
     beforeEach(() => {
-        logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+        registerCoreChangelogCommand.mockReset()
     })
 
-    afterEach(() => {
-        vi.restoreAllMocks()
-        mockReadFile.mockReset()
-    })
-
-    it('passes the outline CHANGELOG.md path through to cli-core', async () => {
-        mockReadFile.mockResolvedValue(SAMPLE_CHANGELOG)
+    it('delegates to @doist/cli-core/commands with the expected config', () => {
         const program = new Command()
-        program.exitOverride()
         registerChangelogCommand(program)
 
-        await program.parseAsync(['node', 'ol', 'changelog', '-n', '1'])
-
-        expect(mockReadFile).toHaveBeenCalledTimes(1)
-        const [path] = mockReadFile.mock.calls[0]
-        expect(String(path)).toMatch(/\/CHANGELOG\.md$/)
+        expect(registerCoreChangelogCommand).toHaveBeenCalledTimes(1)
+        const [passedProgram, config] = registerCoreChangelogCommand.mock.calls[0]
+        expect(passedProgram).toBe(program)
+        expect(basename(config.path)).toBe('CHANGELOG.md')
+        expect(config.repoUrl).toBe('https://github.com/Doist/outline-cli')
+        expect(config.version).toBe(packageJson.version)
+        expect(config.bulletMarkers).toEqual(['*', '-'])
     })
 
-    it('emits a footer link pointing at the outline repo and current version', async () => {
-        mockReadFile.mockResolvedValue(SAMPLE_CHANGELOG)
+    it('derives repoUrl from package.json (strips .git / git+ prefix)', () => {
         const program = new Command()
-        program.exitOverride()
         registerChangelogCommand(program)
 
-        await program.parseAsync(['node', 'ol', 'changelog', '-n', '1'])
-
-        const all = logSpy.mock.calls.map((c: unknown[]) => c[0]).join('\n')
-        expect(all).toContain(
-            `View full changelog: https://github.com/Doist/outline-cli/blob/v${packageJson.version}/CHANGELOG.md`,
-        )
+        const [, config] = registerCoreChangelogCommand.mock.calls[0]
+        expect(config.repoUrl).not.toMatch(/\.git$/)
+        expect(config.repoUrl).not.toMatch(/^git\+/)
     })
 })
