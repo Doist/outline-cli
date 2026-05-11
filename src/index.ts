@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
+import packageJson from '../package.json' with { type: 'json' }
 import { registerAuthCommand } from './commands/auth.js'
 import { registerChangelogCommand } from './commands/changelog.js'
 import { registerCollectionCommand } from './commands/collection.js'
@@ -12,7 +13,7 @@ const program = new Command()
 
 program
     .name('ol')
-    .version('0.1.0')
+    .version(packageJson.version)
     .description('CLI for the Outline wiki/knowledge base API')
     .option('--no-spinner', 'Disable loading animations')
     .option('--accessible', 'Render output in screen-reader-friendly mode')
