@@ -67,7 +67,7 @@ export function registerAuthCommand(program: Command): void {
                 baseUrl?: string
                 callbackPort?: string
             }) => {
-                const configuredBaseUrl = getBaseUrl()
+                const configuredBaseUrl = await getBaseUrl()
                 const optionBaseUrl = options.baseUrl?.trim()
                 const envBaseUrl = process.env.OUTLINE_URL?.trim()
                 let url = optionBaseUrl || envBaseUrl
@@ -101,7 +101,7 @@ export function registerAuthCommand(program: Command): void {
                 }
 
                 if (options.token) {
-                    saveConfig(options.token.trim(), url, optionClientId)
+                    await saveConfig(options.token.trim(), url, optionClientId)
                     try {
                         const { data } = await apiRequest<AuthInfoResponse>('auth.info')
                         console.log(
@@ -116,7 +116,7 @@ export function registerAuthCommand(program: Command): void {
                     return
                 }
 
-                const existingClientId = getOAuthClientId()
+                const existingClientId = await getOAuthClientId()
                 let clientId = optionClientId || existingClientId
 
                 if (!clientId) {
@@ -196,7 +196,7 @@ export function registerAuthCommand(program: Command): void {
                         code,
                     })
 
-                    saveConfig(token, url, clientId)
+                    await saveConfig(token, url, clientId)
 
                     const { data } = await apiRequest<AuthInfoResponse>('auth.info')
                     console.log(
@@ -223,14 +223,14 @@ export function registerAuthCommand(program: Command): void {
     auth.command('status')
         .description('Show current authentication state')
         .action(async () => {
-            const source = getTokenSource()
+            const source = await getTokenSource()
             if (!source) {
                 console.log(chalk.yellow('Not authenticated. Run: ol auth login'))
                 return
             }
 
             console.log(chalk.dim(`Token source: ${source}`))
-            console.log(chalk.dim(`Base URL: ${getBaseUrl()}`))
+            console.log(chalk.dim(`Base URL: ${await getBaseUrl()}`))
 
             try {
                 const { data } = await apiRequest<AuthInfoResponse>('auth.info')
@@ -254,8 +254,8 @@ export function registerAuthCommand(program: Command): void {
 
     auth.command('logout')
         .description('Clear saved authentication')
-        .action(() => {
-            clearConfig()
+        .action(async () => {
+            await clearConfig()
             console.log('Logged out.')
         })
 }

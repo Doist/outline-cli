@@ -1,79 +1,63 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { type Config, getConfig, setConfig, updateConfig } from './config.js'
 
-interface Config {
-    api_token?: string
-    base_url?: string
-    oauth_client_id?: string
-}
-
-const CONFIG_DIR = join(homedir(), '.config', 'outline-cli')
-const CONFIG_PATH = join(CONFIG_DIR, 'config.json')
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
-function readConfig(): Config {
-    if (!existsSync(CONFIG_PATH)) return {}
-    try {
-        return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
-    } catch {
-        return {}
-    }
-}
-
-export function getApiToken(): string {
+export async function getApiToken(): Promise<string> {
     const envToken = process.env.OUTLINE_API_TOKEN
     if (envToken) return envToken
 
-    const config = readConfig()
+    const config = await getConfig()
     if (config.api_token) return config.api_token
 
     throw new Error('No API token found. Set OUTLINE_API_TOKEN env var or run: ol auth login')
 }
 
-export function getBaseUrl(): string {
+export async function getBaseUrl(): Promise<string> {
     const envUrl = process.env.OUTLINE_URL
     if (envUrl) return envUrl.replace(/\/$/, '')
 
-    const config = readConfig()
+    const config = await getConfig()
     if (config.base_url) return config.base_url.replace(/\/$/, '')
 
     return DEFAULT_BASE_URL
 }
 
-export function getOAuthClientId(): string | undefined {
+export async function getOAuthClientId(): Promise<string | undefined> {
     const envClientId = process.env.OUTLINE_OAUTH_CLIENT_ID
     if (envClientId) return envClientId
 
-    const config = readConfig()
+    const config = await getConfig()
     return config.oauth_client_id
 }
 
-export function getTokenSource(): 'env' | 'config' | null {
+export async function getTokenSource(): Promise<'env' | 'config' | null> {
     if (process.env.OUTLINE_API_TOKEN) return 'env'
-    const config = readConfig()
+    const config = await getConfig()
     if (config.api_token) return 'config'
     return null
 }
 
-export function saveConfig(token: string, baseUrl?: string, oauthClientId?: string): void {
-    mkdirSync(CONFIG_DIR, { recursive: true })
-    const existing = readConfig()
-    const config: Config = {
-        ...existing,
-        api_token: token,
-    }
-    if (baseUrl) {
-        config.base_url = baseUrl.replace(/\/$/, '')
-    }
-    if (oauthClientId) {
-        config.oauth_client_id = oauthClientId
-    }
-    writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`)
+export async function saveConfig(
+    token: string,
+    baseUrl?: string,
+    oauthClientId?: string,
+): Promise<void> {
+    const updates: Partial<Config> = { api_token: token }
+    if (baseUrl) updates.base_url = baseUrl.replace(/\/$/, '')
+    if (oauthClientId) updates.oauth_client_id = oauthClientId
+    await updateConfig(updates)
 }
 
-export function clearConfig(): void {
-    if (existsSync(CONFIG_PATH)) {
-        rmSync(CONFIG_PATH)
-    }
+/**
+ * Clear the auth-related keys without deleting the file. The config is now
+ * shared with non-auth settings (notably `update_channel`); a blanket unlink
+ * would silently reset the user's update-channel preference too.
+ */
+export async function clearConfig(): Promise<void> {
+    const existing = await getConfig()
+    const { api_token, base_url, oauth_client_id, ...rest } = existing
+    void api_token
+    void base_url
+    void oauth_client_id
+    await setConfig(rest as Config)
 }

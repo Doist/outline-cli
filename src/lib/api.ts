@@ -51,8 +51,7 @@ export interface PaginatedResult<T> {
  * Core API request function without spinner wrapping.
  */
 async function rawApiRequest<T>(path: string, body: object = {}): Promise<PaginatedResult<T>> {
-    const baseUrl = getBaseUrl()
-    const token = getApiToken()
+    const [baseUrl, token] = await Promise.all([getBaseUrl(), getApiToken()])
 
     const res = await fetchWithRetry({
         url: `${baseUrl}/api/${path}`,

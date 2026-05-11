@@ -1,3 +1,4 @@
+import { formatJson, formatNdjson } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
 
@@ -23,12 +24,12 @@ export function outputItem<T extends object>(
 ): void {
     if (opts.ndjson) {
         const data = opts.full || !essentialKeys ? item : pick(item, essentialKeys)
-        console.log(JSON.stringify(data))
+        console.log(formatNdjson([data]))
         return
     }
     if (opts.json) {
         const data = opts.full || !essentialKeys ? item : pick(item, essentialKeys)
-        console.log(JSON.stringify(data, null, 2))
+        console.log(formatJson(data))
         return
     }
     console.log(humanFormatter(item))
@@ -41,16 +42,16 @@ export function outputList<T extends object>(
     opts: OutputOptions = {},
     pagination?: Pagination,
 ): void {
+    const project = (item: T) => (opts.full || !essentialKeys ? item : pick(item, essentialKeys))
+
     if (opts.ndjson) {
+        // Stream item-by-item: avoids buffering the whole list and matches
+        // the canonical NDJSON contract (one record per write).
         for (const item of items) {
-            const data = opts.full || !essentialKeys ? item : pick(item, essentialKeys)
-            console.log(JSON.stringify(data))
+            console.log(formatNdjson([project(item)]))
         }
     } else if (opts.json) {
-        const data = items.map((item) =>
-            opts.full || !essentialKeys ? item : pick(item, essentialKeys),
-        )
-        console.log(JSON.stringify(data, null, 2))
+        console.log(formatJson(items.map(project)))
     } else {
         for (const item of items) {
             console.log(humanFormatter(item))

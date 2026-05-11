@@ -1,8 +1,16 @@
-import { marked } from 'marked'
-import { markedTerminal } from 'marked-terminal'
+import {
+    preloadMarkdown as corePreloadMarkdown,
+    renderMarkdown as coreRenderMarkdown,
+} from '@doist/cli-core/markdown'
 
-marked.use(markedTerminal())
+let preloadPromise: Promise<void> | null = null
 
-export function renderMarkdown(text: string): string {
-    return marked.parse(text) as string
+export async function preloadMarkdown(): Promise<void> {
+    if (!preloadPromise) preloadPromise = corePreloadMarkdown()
+    return preloadPromise
+}
+
+export async function renderMarkdown(text: string): Promise<string> {
+    await preloadMarkdown()
+    return coreRenderMarkdown(text)
 }

@@ -1,7 +1,10 @@
 import chalk from 'chalk'
 import { setUpdateChannel, type UpdateChannel } from '../../lib/update-config.js'
 
-export function switchChannel(options: { stable?: boolean; preRelease?: boolean }): void {
+export async function switchChannel(options: {
+    stable?: boolean
+    preRelease?: boolean
+}): Promise<void> {
     if (options.stable && options.preRelease) {
         console.error(chalk.red('Error:'), 'Specify either --stable or --pre-release, not both.')
         process.exitCode = 1
@@ -16,7 +19,7 @@ export function switchChannel(options: { stable?: boolean; preRelease?: boolean 
 
     const channel: UpdateChannel = options.preRelease ? 'pre-release' : 'stable'
 
-    setUpdateChannel(channel)
+    await setUpdateChannel(channel)
 
     if (channel === 'pre-release') {
         console.log(chalk.green('✓'), `Update channel set to ${chalk.magenta('pre-release')}`)
