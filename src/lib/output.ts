@@ -1,11 +1,15 @@
-import { formatJson, formatNdjson } from '@doist/cli-core'
+import {
+    formatJson,
+    formatNdjson,
+    printEmpty as corePrintEmpty,
+    type ViewOptions,
+} from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
 
-interface OutputOptions {
-    json?: boolean
-    ndjson?: boolean
+export type OutputOptions = ViewOptions & {
     full?: boolean
+    raw?: boolean
 }
 
 export function getOutputOptions(opts: Record<string, unknown>): OutputOptions {
@@ -13,7 +17,19 @@ export function getOutputOptions(opts: Record<string, unknown>): OutputOptions {
         json: Boolean(opts.json),
         ndjson: Boolean(opts.ndjson),
         full: Boolean(opts.full),
+        raw: Boolean(opts.raw),
     }
+}
+
+/**
+ * Wraps cli-core's `printEmpty` so list commands can call a single helper
+ * for the empty-state branch and stay consistent with the canonical contract:
+ *   --json   → `[]\n`
+ *   --ndjson → no output
+ *   neither  → human message
+ */
+export function printEmpty(message: string, opts: OutputOptions = {}): void {
+    corePrintEmpty({ options: opts, message })
 }
 
 export function outputItem<T extends object>(

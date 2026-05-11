@@ -53,6 +53,7 @@ describe('output', () => {
             json: true,
             ndjson: false,
             full: true,
+            raw: false,
         })
     })
 

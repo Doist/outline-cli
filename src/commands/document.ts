@@ -5,7 +5,7 @@ import open from 'open'
 import { apiRequest } from '../lib/api.js'
 import { getBaseUrl } from '../lib/auth.js'
 import { renderMarkdown } from '../lib/markdown.js'
-import { formatError, getOutputOptions, outputItem, outputList } from '../lib/output.js'
+import { formatError, getOutputOptions, outputItem, outputList, printEmpty } from '../lib/output.js'
 import { resolveCollectionId, resolveDocumentId, resolveDocumentRef } from '../lib/refs.js'
 
 interface Document {
@@ -79,7 +79,12 @@ export function registerDocumentCommand(program: Command): void {
 
             const { data, pagination } = await apiRequest<Document[]>('documents.list', body)
 
-            outputList(data, formatDoc, essentialKeys, getOutputOptions(opts), pagination)
+            const outputOpts = getOutputOptions(opts)
+            if (data.length === 0) {
+                printEmpty('No documents found.', outputOpts)
+                return
+            }
+            outputList(data, formatDoc, essentialKeys, outputOpts, pagination)
         })
 
     doc.command('get <id>')
