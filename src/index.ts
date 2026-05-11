@@ -15,6 +15,7 @@ program
     .version('0.1.0')
     .description('CLI for the Outline wiki/knowledge base API')
     .option('--no-spinner', 'Disable loading animations')
+    .option('--accessible', 'Render output in screen-reader-friendly mode')
     .addHelpText(
         'after',
         `

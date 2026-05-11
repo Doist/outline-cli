@@ -9,7 +9,6 @@ import type { Pagination } from './api.js'
 
 export type OutputOptions = ViewOptions & {
     full?: boolean
-    raw?: boolean
 }
 
 export function getOutputOptions(opts: Record<string, unknown>): OutputOptions {
@@ -17,7 +16,6 @@ export function getOutputOptions(opts: Record<string, unknown>): OutputOptions {
         json: Boolean(opts.json),
         ndjson: Boolean(opts.ndjson),
         full: Boolean(opts.full),
-        raw: Boolean(opts.raw),
     }
 }
 
@@ -57,7 +55,13 @@ export function outputList<T extends object>(
     essentialKeys?: (keyof T)[],
     opts: OutputOptions = {},
     pagination?: Pagination,
+    emptyMessage?: string,
 ): void {
+    if (items.length === 0 && emptyMessage !== undefined) {
+        printEmpty(emptyMessage, opts)
+        return
+    }
+
     const project = (item: T) => (opts.full || !essentialKeys ? item : pick(item, essentialKeys))
 
     if (opts.ndjson) {
