@@ -1,3 +1,4 @@
+import { formatJson, formatNdjson } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
 
@@ -23,12 +24,12 @@ export function outputItem<T extends object>(
 ): void {
     if (opts.ndjson) {
         const data = opts.full || !essentialKeys ? item : pick(item, essentialKeys)
-        console.log(JSON.stringify(data))
+        console.log(formatNdjson([data]))
         return
     }
     if (opts.json) {
         const data = opts.full || !essentialKeys ? item : pick(item, essentialKeys)
-        console.log(JSON.stringify(data, null, 2))
+        console.log(formatJson(data))
         return
     }
     console.log(humanFormatter(item))
@@ -42,15 +43,15 @@ export function outputList<T extends object>(
     pagination?: Pagination,
 ): void {
     if (opts.ndjson) {
-        for (const item of items) {
-            const data = opts.full || !essentialKeys ? item : pick(item, essentialKeys)
-            console.log(JSON.stringify(data))
-        }
+        const data = items.map((item) =>
+            opts.full || !essentialKeys ? item : pick(item, essentialKeys),
+        )
+        if (data.length > 0) console.log(formatNdjson(data))
     } else if (opts.json) {
         const data = items.map((item) =>
             opts.full || !essentialKeys ? item : pick(item, essentialKeys),
         )
-        console.log(JSON.stringify(data, null, 2))
+        console.log(formatJson(data))
     } else {
         for (const item of items) {
             console.log(humanFormatter(item))

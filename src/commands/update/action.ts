@@ -95,7 +95,7 @@ export async function updateAction(options: { check?: boolean; channel?: boolean
     }
 
     if (options.channel) {
-        const ch = getUpdateChannel()
+        const ch = await getUpdateChannel()
         if (ch === 'pre-release') {
             console.log(`Update channel: ${chalk.magenta('pre-release')}`)
         } else {
@@ -104,7 +104,7 @@ export async function updateAction(options: { check?: boolean; channel?: boolean
         return
     }
 
-    const channel = getUpdateChannel()
+    const channel = await getUpdateChannel()
     const tag = getInstallTag(channel)
     const label = channelLabel(channel)
 

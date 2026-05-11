@@ -2,9 +2,10 @@ import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/auth.js', () => ({
-    getApiToken: () => 'test-token',
-    getBaseUrl: () => 'https://test.outline.com',
-    getTokenSource: () => 'config' as const,
+    getApiToken: async () => 'test-token',
+    getBaseUrl: async () => 'https://test.outline.com',
+    getOAuthClientId: async () => undefined,
+    getTokenSource: async () => 'config' as const,
     saveConfig: vi.fn(),
     clearConfig: vi.fn(),
 }))
@@ -122,7 +123,8 @@ describe('document commands', () => {
         await program.parseAsync(['node', 'ol', 'document', 'get', 'my-doc-abc123'])
 
         expect(apiRequest).toHaveBeenCalledWith('documents.info', { id: 'abc123' })
-        expect(logs[0]).toContain('# My Doc')
+        expect(logs[0]).toContain('My Doc')
+        expect(logs[0]).toContain('Hello world')
     })
 
     it('document list passes pagination options', async () => {

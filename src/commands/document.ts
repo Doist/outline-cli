@@ -105,7 +105,7 @@ export function registerDocumentCommand(program: Command): void {
                 outputItem(data, formatDocFull, essentialKeys, outputOpts)
             } else {
                 const content = formatDocFull(data)
-                console.log(opts.raw ? content : renderMarkdown(content))
+                console.log(opts.raw ? content : await renderMarkdown(content))
             }
         })
 
@@ -113,7 +113,7 @@ export function registerDocumentCommand(program: Command): void {
         .description('Open a document in the browser')
         .action(async (id: string) => {
             const resolved = await resolveDocumentRef(id)
-            const fullUrl = `${getBaseUrl()}${resolved.url}`
+            const fullUrl = `${await getBaseUrl()}${resolved.url}`
             await open(fullUrl)
             console.log(chalk.dim(`Opened: ${fullUrl}`))
         })

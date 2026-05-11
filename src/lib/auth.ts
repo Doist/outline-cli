@@ -1,64 +1,49 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { unlink } from 'node:fs/promises'
+import { type Config, getConfig, getConfigPath, setConfig } from './config.js'
 
-interface Config {
-    api_token?: string
-    base_url?: string
-    oauth_client_id?: string
-}
-
-const CONFIG_DIR = join(homedir(), '.config', 'outline-cli')
-const CONFIG_PATH = join(CONFIG_DIR, 'config.json')
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
-function readConfig(): Config {
-    if (!existsSync(CONFIG_PATH)) return {}
-    try {
-        return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
-    } catch {
-        return {}
-    }
-}
-
-export function getApiToken(): string {
+export async function getApiToken(): Promise<string> {
     const envToken = process.env.OUTLINE_API_TOKEN
     if (envToken) return envToken
 
-    const config = readConfig()
+    const config = await getConfig()
     if (config.api_token) return config.api_token
 
     throw new Error('No API token found. Set OUTLINE_API_TOKEN env var or run: ol auth login')
 }
 
-export function getBaseUrl(): string {
+export async function getBaseUrl(): Promise<string> {
     const envUrl = process.env.OUTLINE_URL
     if (envUrl) return envUrl.replace(/\/$/, '')
 
-    const config = readConfig()
+    const config = await getConfig()
     if (config.base_url) return config.base_url.replace(/\/$/, '')
 
     return DEFAULT_BASE_URL
 }
 
-export function getOAuthClientId(): string | undefined {
+export async function getOAuthClientId(): Promise<string | undefined> {
     const envClientId = process.env.OUTLINE_OAUTH_CLIENT_ID
     if (envClientId) return envClientId
 
-    const config = readConfig()
+    const config = await getConfig()
     return config.oauth_client_id
 }
 
-export function getTokenSource(): 'env' | 'config' | null {
+export async function getTokenSource(): Promise<'env' | 'config' | null> {
     if (process.env.OUTLINE_API_TOKEN) return 'env'
-    const config = readConfig()
+    const config = await getConfig()
     if (config.api_token) return 'config'
     return null
 }
 
-export function saveConfig(token: string, baseUrl?: string, oauthClientId?: string): void {
-    mkdirSync(CONFIG_DIR, { recursive: true })
-    const existing = readConfig()
+export async function saveConfig(
+    token: string,
+    baseUrl?: string,
+    oauthClientId?: string,
+): Promise<void> {
+    const existing = await getConfig()
     const config: Config = {
         ...existing,
         api_token: token,
@@ -69,11 +54,13 @@ export function saveConfig(token: string, baseUrl?: string, oauthClientId?: stri
     if (oauthClientId) {
         config.oauth_client_id = oauthClientId
     }
-    writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`)
+    await setConfig(config)
 }
 
-export function clearConfig(): void {
-    if (existsSync(CONFIG_PATH)) {
-        rmSync(CONFIG_PATH)
+export async function clearConfig(): Promise<void> {
+    try {
+        await unlink(getConfigPath())
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
 }

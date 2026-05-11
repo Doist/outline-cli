@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/auth.js', () => ({
-    getApiToken: () => 'test-token',
-    getBaseUrl: () => 'https://test.outline.com',
+    getApiToken: async () => 'test-token',
+    getBaseUrl: async () => 'https://test.outline.com',
 }))
 
 const mockApiRequest = vi.fn()

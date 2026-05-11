@@ -18,17 +18,19 @@ interface SearchResult {
 
 const essentialKeys: (keyof SearchResult)[] = ['document', 'context']
 
-function formatResult(result: SearchResult): string {
-    const { document, context } = result
-    const title = chalk.bold(document.title)
-    const id = chalk.dim(document.urlId)
-    const link = chalk.dim(`${getBaseUrl()}${document.url}`)
-    const snippet = context
-        .replace(/<b>(.*?)<\/b>/g, (_, m) => chalk.bold(m))
-        .replace(/<\/?b>/g, '')
-        .trim()
-        .slice(0, 120)
-    return `${title} ${id}\n  ${link}\n  ${chalk.dim(snippet)}\n`
+function makeFormatResult(baseUrl: string): (result: SearchResult) => string {
+    return (result) => {
+        const { document, context } = result
+        const title = chalk.bold(document.title)
+        const id = chalk.dim(document.urlId)
+        const link = chalk.dim(`${baseUrl}${document.url}`)
+        const snippet = context
+            .replace(/<b>(.*?)<\/b>/g, (_, m) => chalk.bold(m))
+            .replace(/<\/?b>/g, '')
+            .trim()
+            .slice(0, 120)
+        return `${title} ${id}\n  ${link}\n  ${chalk.dim(snippet)}\n`
+    }
 }
 
 export function registerSearchCommand(program: Command): void {
@@ -52,6 +54,7 @@ export function registerSearchCommand(program: Command): void {
             const { data, pagination } = await apiRequest<SearchResult[]>('documents.search', body)
 
             const outputOpts = getOutputOptions(opts)
+            const formatResult = makeFormatResult(await getBaseUrl())
             outputList(data, formatResult, essentialKeys, outputOpts, pagination)
         })
 }
