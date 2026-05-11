@@ -3,20 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const TEST_HOME = join(tmpdir(), `outline-cli-test-${process.pid}`)
-const TEST_CONFIG_DIR = join(TEST_HOME, '.config', 'outline-cli')
+const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}`)
+const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
 const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, 'config.json')
-
-vi.mock('node:os', async () => {
-    const actual = await vi.importActual<typeof import('node:os')>('node:os')
-    return {
-        ...actual,
-        homedir: () => join(tmpdir(), `outline-cli-test-${process.pid}`),
-    }
-})
 
 describe('auth', () => {
     beforeEach(() => {
+        process.env.XDG_CONFIG_HOME = TEST_XDG
         mkdirSync(TEST_CONFIG_DIR, { recursive: true })
         delete process.env.OUTLINE_API_TOKEN
         delete process.env.OUTLINE_URL
@@ -25,9 +18,10 @@ describe('auth', () => {
     })
 
     afterEach(() => {
-        if (existsSync(TEST_HOME)) {
-            rmSync(TEST_HOME, { recursive: true })
+        if (existsSync(TEST_XDG)) {
+            rmSync(TEST_XDG, { recursive: true })
         }
+        delete process.env.XDG_CONFIG_HOME
     })
 
     it('getApiToken reads from env var first', async () => {
