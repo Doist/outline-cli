@@ -12,6 +12,9 @@ export type Config = CoreConfig & {
     api_token?: string
     base_url?: string
     oauth_client_id?: string
+    auth_user_id?: string
+    auth_user_name?: string
+    auth_team_name?: string
 }
 
 /**
