@@ -1,6 +1,9 @@
 import { formatJson, formatNdjson, printEmpty, type ViewOptions } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
+import { BaseCliError } from './errors.js'
+
+type AnyCliError = BaseCliError<string>
 
 export type OutputOptions = ViewOptions & {
     full?: boolean
@@ -79,13 +82,42 @@ function pick<T extends object>(obj: T, keys: (keyof T)[]): Partial<T> {
     return result
 }
 
-export function formatError(code: string, message: string, hints?: string[]): string {
-    const lines = [`Error: ${code}`, message]
-    if (hints && hints.length > 0) {
+function toCliError(
+    codeOrError: string | AnyCliError,
+    message?: string,
+    hints?: string[],
+): AnyCliError {
+    if (typeof codeOrError === 'string') {
+        return new BaseCliError(codeOrError, message ?? '', { hints })
+    }
+    return codeOrError
+}
+
+export function formatError(error: AnyCliError): string
+export function formatError(code: string, message: string, hints?: string[]): string
+export function formatError(
+    codeOrError: string | AnyCliError,
+    message?: string,
+    hints?: string[],
+): string {
+    const err = toCliError(codeOrError, message, hints)
+    const lines = [`Error: ${err.code}`, err.message]
+    if (err.hints && err.hints.length > 0) {
         lines.push('')
-        for (const hint of hints) {
+        for (const hint of err.hints) {
             lines.push(`  - ${hint}`)
         }
     }
     return chalk.red(lines.join('\n'))
+}
+
+export function formatErrorJson(error: AnyCliError): string
+export function formatErrorJson(code: string, message: string, hints?: string[]): string
+export function formatErrorJson(
+    codeOrError: string | AnyCliError,
+    message?: string,
+    hints?: string[],
+): string {
+    const err = toCliError(codeOrError, message, hints)
+    return JSON.stringify({ error: { code: err.code, message: err.message, hints: err.hints } })
 }

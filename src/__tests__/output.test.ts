@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatError, getOutputOptions, outputItem, outputList } from '../lib/output.js'
+import { BaseCliError } from '../lib/errors.js'
+import {
+    formatError,
+    formatErrorJson,
+    getOutputOptions,
+    outputItem,
+    outputList,
+} from '../lib/output.js'
 
 describe('output', () => {
     let logs: string[]
@@ -86,6 +93,37 @@ describe('output', () => {
             expect(result).toContain('Error: NO_HINTS')
             expect(result).toContain('No hints provided')
             expect(result).not.toContain('  - ')
+        })
+
+        it('formats a cli-core CliError instance (code, message, hints)', () => {
+            const err = new BaseCliError('FILE_READ_ERROR', 'Could not read changelog file', {
+                hints: ['Check the file path'],
+            })
+            const result = formatError(err)
+            expect(result).toContain('Error: FILE_READ_ERROR')
+            expect(result).toContain('Could not read changelog file')
+            expect(result).toContain('Check the file path')
+        })
+    })
+
+    describe('formatErrorJson', () => {
+        it('serializes a cli-core CliError instance', () => {
+            const err = new BaseCliError('INVALID_TYPE', 'Count must be a positive integer')
+            const parsed = JSON.parse(formatErrorJson(err))
+            expect(parsed).toEqual({
+                error: {
+                    code: 'INVALID_TYPE',
+                    message: 'Count must be a positive integer',
+                    hints: undefined,
+                },
+            })
+        })
+
+        it('serializes from positional args', () => {
+            const parsed = JSON.parse(formatErrorJson('CODE', 'msg', ['hint']))
+            expect(parsed).toEqual({
+                error: { code: 'CODE', message: 'msg', hints: ['hint'] },
+            })
         })
     })
 })

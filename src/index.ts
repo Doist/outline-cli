@@ -8,6 +8,9 @@ import { registerDocumentCommand } from './commands/document.js'
 import { registerSearchCommand } from './commands/search.js'
 import { registerSkillCommand } from './commands/skill.js'
 import { registerUpdateCommand } from './commands/update/index.js'
+import { BaseCliError } from './lib/errors.js'
+import { isJsonMode } from './lib/global-args.js'
+import { formatError, formatErrorJson } from './lib/output.js'
 
 const program = new Command()
 
@@ -34,6 +37,10 @@ registerChangelogCommand(program)
 registerUpdateCommand(program)
 
 program.parseAsync().catch((err: Error) => {
-    console.error(err.message)
+    if (err instanceof BaseCliError) {
+        console.error(isJsonMode() ? formatErrorJson(err) : formatError(err))
+    } else {
+        console.error(err.message)
+    }
     process.exit(1)
 })
