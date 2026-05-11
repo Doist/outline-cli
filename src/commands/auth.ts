@@ -9,7 +9,7 @@ import { formatError } from '../lib/output.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 
-interface AuthInfoResponse {
+type AuthInfoResponse = {
     user: { name: string; email: string }
     team: { name: string; subdomain: string }
 }

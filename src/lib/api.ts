@@ -47,7 +47,7 @@ export interface PaginatedResult<T> {
     pagination?: Pagination
 }
 
-export interface ApiRequestOverrides {
+export type ApiRequestOverrides = {
     token?: string
     baseUrl?: string
 }

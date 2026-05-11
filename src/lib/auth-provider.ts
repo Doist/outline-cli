@@ -12,7 +12,7 @@ import { getConfig, updateConfig } from './config.js'
 
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
-interface AuthInfoResponse {
+type AuthInfoResponse = {
     user: { id: string; name: string; email: string }
     team: { name: string; subdomain: string }
 }
