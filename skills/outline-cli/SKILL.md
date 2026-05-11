@@ -15,6 +15,7 @@ Use this skill when the user wants to interact with their Outline wiki/knowledge
 - `ol doc open <id>` - Open document in browser
 - `ol doc create --title "Title" --collection <id>` - Create document
 - `ol col list` - List collections
+- `ol att create <file> --document <id>` - Upload attachment
 
 ## Output Formats
 
@@ -71,6 +72,13 @@ ol col update <id> --name "New Name"
 ol col delete <id> --confirm
 ```
 
+### Attachments
+```bash
+ol att create <file> --document <ref>                    # Upload file to document (content type auto-detected)
+ol att create <file> --document <ref> --content-type "image/png"  # Explicit content type
+ol att create <file> --document <ref> --json             # Output JSON with attachment URL
+```
+
 ### Authentication
 ```bash
 ol auth login                 # Configure API token and base URL
@@ -106,6 +114,13 @@ ol doc create --title "Meeting Notes" --collection <id> --file ./notes.md --publ
 ```bash
 ol col list --json
 ol doc list --collection <id> --sort title --direction ASC
+```
+
+### Upload an image to a document
+```bash
+ol att create ./screenshot.png --document <id> --json
+# Returns: { "url": "/api/attachments.redirect?id=...", ... }
+# Use the URL in markdown: ![alt text](/api/attachments.redirect?id=...)
 ```
 
 ### Bulk export with ndjson

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { basename } from 'node:path'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { getApiToken, getBaseUrl } from './auth.js'
 import { type SpinnerOptions, withSpinner } from './spinner.js'
@@ -22,6 +24,7 @@ const API_SPINNER_CONFIG: Record<string, SpinnerOptions> = {
     'collections.create': { text: 'Creating collection...', color: 'green' },
     'collections.update': { text: 'Updating collection...', color: 'yellow' },
     'collections.delete': { text: 'Deleting collection...', color: 'yellow' },
+    'attachments.create': { text: 'Uploading attachment...', color: 'green' },
 }
 
 export interface Pagination {
@@ -90,4 +93,68 @@ export async function apiRequest<T>(path: string, body: object = {}): Promise<Pa
     }
 
     return withSpinner(spinnerConfig, () => rawApiRequest<T>(path, body))
+}
+
+interface AttachmentCreateResponse {
+    uploadUrl: string
+    form: Record<string, string>
+    attachment: {
+        id: string
+        name: string
+        contentType: string
+        size: number
+        url: string
+        documentId: string | null
+    }
+}
+
+/**
+ * Two-step file upload for Outline attachments:
+ * 1. POST JSON to attachments.create → get presigned upload URL + form fields
+ * 2. POST multipart form-data to the presigned URL with the file
+ */
+async function rawApiUpload(
+    filePath: string,
+    metadata: { name: string; size: number; contentType: string; documentId: string },
+): Promise<AttachmentCreateResponse> {
+    // Step 1: Create attachment record and get presigned URL
+    const { data } = await rawApiRequest<AttachmentCreateResponse>('attachments.create', metadata)
+
+    // Step 2: Upload file to presigned URL
+    const form = new FormData()
+    for (const [key, value] of Object.entries(data.form)) {
+        form.append(key, value)
+    }
+    const fileBuffer = readFileSync(filePath)
+    const fileBlob = new Blob([fileBuffer.buffer as ArrayBuffer])
+    form.append('file', fileBlob, basename(filePath))
+
+    const uploadRes = await fetchWithRetry({
+        url: data.uploadUrl,
+        options: {
+            method: 'POST',
+            body: form,
+        },
+    })
+
+    if (!uploadRes.ok) {
+        throw new Error(`Upload failed: ${uploadRes.status} ${uploadRes.statusText}`)
+    }
+
+    return data
+}
+
+/**
+ * Public file upload function with spinner support.
+ */
+export async function apiUpload(
+    filePath: string,
+    metadata: { name: string; size: number; contentType: string; documentId: string },
+): Promise<AttachmentCreateResponse> {
+    const spinnerConfig = API_SPINNER_CONFIG['attachments.create'] ?? {
+        text: 'Uploading...',
+        color: 'green' as const,
+    }
+
+    return withSpinner(spinnerConfig, () => rawApiUpload(filePath, metadata))
 }

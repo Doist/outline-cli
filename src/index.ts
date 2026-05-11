@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
+import { registerAttachmentCommand } from './commands/attachment.js'
 import { registerAuthCommand } from './commands/auth.js'
 import { registerChangelogCommand } from './commands/changelog.js'
 import { registerCollectionCommand } from './commands/collection.js'
@@ -23,6 +24,7 @@ Note for AI/LLM agents:
   Default JSON shows essential fields; use --full for all fields.`,
     )
 
+registerAttachmentCommand(program)
 registerAuthCommand(program)
 registerSearchCommand(program)
 registerDocumentCommand(program)
