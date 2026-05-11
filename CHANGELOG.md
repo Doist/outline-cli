@@ -1,3 +1,9 @@
+## [1.5.3](https://github.com/Doist/outline-cli/compare/v1.5.2...v1.5.3) (2026-05-11)
+
+### Bug Fixes
+
+* `ol --version` shows the wrong version ([#60](https://github.com/Doist/outline-cli/issues/60)) ([3ed8b10](https://github.com/Doist/outline-cli/commit/3ed8b10d19d727c131b87b2dc6939b5ab0b04a09))
+
 ## [1.5.2](https://github.com/Doist/outline-cli/compare/v1.5.1...v1.5.2) (2026-05-09)
 
 ### Bug Fixes
