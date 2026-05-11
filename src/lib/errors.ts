@@ -1,5 +1,8 @@
 import { CliError as CoreCliError, type CliErrorCode, type ErrorType } from '@doist/cli-core'
 
+export { CoreCliError as BaseCliError }
+export type { ErrorType } from '@doist/cli-core'
+
 export type ErrorCode =
     | 'AUTH_VERIFICATION_FAILED'
     | 'CONFIRMATION_REQUIRED'

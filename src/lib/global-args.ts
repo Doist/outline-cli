@@ -14,3 +14,8 @@ export const shouldDisableSpinner = createSpinnerGate({
     envVar: 'OL_SPINNER',
     getArgs: store.get,
 })
+
+export function isJsonMode(): boolean {
+    const args = store.get()
+    return args.json || args.ndjson
+}

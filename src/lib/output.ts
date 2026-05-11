@@ -1,6 +1,9 @@
 import { formatJson, formatNdjson, printEmpty, type ViewOptions } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
+import type { BaseCliError, ErrorType } from './errors.js'
+
+type AnyCliError = BaseCliError<string>
 
 export type OutputOptions = ViewOptions & {
     full?: boolean
@@ -79,13 +82,47 @@ function pick<T extends object>(obj: T, keys: (keyof T)[]): Partial<T> {
     return result
 }
 
-export function formatError(code: string, message: string, hints?: string[]): string {
-    const lines = [`Error: ${code}`, message]
-    if (hints && hints.length > 0) {
+function resolveErrorParts(
+    codeOrError: string | AnyCliError,
+    message?: string,
+    hints?: string[],
+): { code: string; message: string; hints: string[] | undefined; type: ErrorType } {
+    if (typeof codeOrError === 'string') {
+        return { code: codeOrError, message: message ?? '', hints, type: 'error' }
+    }
+    return {
+        code: codeOrError.code,
+        message: codeOrError.message,
+        hints: codeOrError.hints,
+        type: codeOrError.type ?? 'error',
+    }
+}
+
+export function formatError(error: AnyCliError): string
+export function formatError(code: string, message: string, hints?: string[]): string
+export function formatError(
+    codeOrError: string | AnyCliError,
+    message?: string,
+    hints?: string[],
+): string {
+    const { code, message: msg, hints: h } = resolveErrorParts(codeOrError, message, hints)
+    const lines = [`Error: ${code}`, msg]
+    if (h && h.length > 0) {
         lines.push('')
-        for (const hint of hints) {
+        for (const hint of h) {
             lines.push(`  - ${hint}`)
         }
     }
     return chalk.red(lines.join('\n'))
+}
+
+export function formatErrorJson(error: AnyCliError): string
+export function formatErrorJson(code: string, message: string, hints?: string[]): string
+export function formatErrorJson(
+    codeOrError: string | AnyCliError,
+    message?: string,
+    hints?: string[],
+): string {
+    const { code, message: msg, hints: h } = resolveErrorParts(codeOrError, message, hints)
+    return JSON.stringify({ error: { code, message: msg, hints: h } })
 }
