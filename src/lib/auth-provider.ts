@@ -6,6 +6,7 @@ import {
     generateVerifier,
     type TokenStore,
 } from '@doist/cli-core/auth'
+import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
 import { clearConfig, getBaseUrl, getOAuthClientId } from './auth.js'
 import { getConfig, updateConfig } from './config.js'
@@ -22,7 +23,7 @@ export type OutlineAccount = AuthAccount & {
     label: string
     baseUrl: string
     oauthClientId: string
-    teamName: string
+    teamName?: string
 }
 
 type OutlineHandshake = Record<string, unknown> & {
@@ -41,7 +42,8 @@ function stringFlag(flags: Record<string, unknown>, key: string): string | undef
 }
 
 async function prompt(question: string): Promise<string> {
-    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    // Output to stderr so `--json` / `--ndjson` envelopes on stdout stay clean.
+    const rl = createInterface({ input: process.stdin, output: process.stderr })
     try {
         return (await rl.question(question)).trim()
     } finally {
@@ -107,10 +109,13 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
                 code,
             })
 
-            const res = await fetch(`${hs.baseUrl}/oauth/token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params.toString(),
+            const res = await fetchWithRetry({
+                url: `${hs.baseUrl}/oauth/token`,
+                options: {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                },
             })
 
             const json = (await res.json().catch(() => ({}))) as {
@@ -170,7 +175,13 @@ export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
             }
             return {
                 token: config.api_token,
-                account: { id, label, baseUrl, oauthClientId, teamName: '' },
+                account: {
+                    id,
+                    label,
+                    baseUrl,
+                    oauthClientId,
+                    teamName: config.auth_team_name,
+                },
             }
         },
         async set(account, token) {
@@ -180,6 +191,7 @@ export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
                 oauth_client_id: account.oauthClientId,
                 auth_user_id: account.id,
                 auth_user_name: account.label,
+                auth_team_name: account.teamName,
             })
         },
         async clear() {

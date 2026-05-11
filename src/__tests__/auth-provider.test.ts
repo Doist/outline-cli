@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -9,6 +9,10 @@ const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, 'config.json')
 
 vi.mock('../transport/fetch-with-retry.js', () => ({
     fetchWithRetry: vi.fn(),
+}))
+
+vi.mock('../lib/api.js', () => ({
+    apiRequest: vi.fn(),
 }))
 
 describe('OutlineAuthProvider', () => {
@@ -27,7 +31,6 @@ describe('OutlineAuthProvider', () => {
             rmSync(TEST_XDG, { recursive: true })
         }
         delete process.env.XDG_CONFIG_HOME
-        vi.unstubAllGlobals()
     })
 
     describe('authorize', () => {
@@ -62,7 +65,6 @@ describe('OutlineAuthProvider', () => {
 
         it('reads base URL and client ID from environment when flags absent', async () => {
             process.env.OUTLINE_URL = 'https://env.example.com/'
-            // OUTLINE_OAUTH_CLIENT_ID is read via getOAuthClientId
             process.env.OUTLINE_OAUTH_CLIENT_ID = 'env-cid'
 
             const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
@@ -83,12 +85,12 @@ describe('OutlineAuthProvider', () => {
     })
 
     describe('exchangeCode', () => {
-        it('posts form-encoded token exchange and returns access token', async () => {
-            const fetchMock = vi.fn().mockResolvedValue({
+        it('posts form-encoded token exchange via fetchWithRetry and returns access token', async () => {
+            const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+            vi.mocked(fetchWithRetry).mockResolvedValue({
                 ok: true,
                 json: async () => ({ access_token: 'tok-abc' }),
-            })
-            vi.stubGlobal('fetch', fetchMock)
+            } as Response)
 
             const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
             const provider = createOutlineAuthProvider()
@@ -105,14 +107,14 @@ describe('OutlineAuthProvider', () => {
             })
 
             expect(result.accessToken).toBe('tok-abc')
-            expect(fetchMock).toHaveBeenCalledTimes(1)
-            const [tokenUrl, init] = fetchMock.mock.calls[0]
-            expect(tokenUrl).toBe('https://wiki.example.com/oauth/token')
-            expect(init.method).toBe('POST')
-            expect(init.headers).toMatchObject({
+            expect(fetchWithRetry).toHaveBeenCalledTimes(1)
+            const args = vi.mocked(fetchWithRetry).mock.calls[0][0]
+            expect(args.url).toBe('https://wiki.example.com/oauth/token')
+            expect(args.options.method).toBe('POST')
+            expect(args.options.headers).toMatchObject({
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
-            const body = new URLSearchParams(init.body as string)
+            const body = new URLSearchParams(args.options.body as string)
             expect(body.get('grant_type')).toBe('authorization_code')
             expect(body.get('client_id')).toBe('cid-xyz')
             expect(body.get('redirect_uri')).toBe('http://localhost:54969/callback')
@@ -121,17 +123,15 @@ describe('OutlineAuthProvider', () => {
         })
 
         it('surfaces provider error description on failed exchange', async () => {
-            vi.stubGlobal(
-                'fetch',
-                vi.fn().mockResolvedValue({
-                    ok: false,
-                    statusText: 'Bad Request',
-                    json: async () => ({
-                        error: 'invalid_grant',
-                        error_description: 'Authorization code expired',
-                    }),
+            const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+            vi.mocked(fetchWithRetry).mockResolvedValue({
+                ok: false,
+                statusText: 'Bad Request',
+                json: async () => ({
+                    error: 'invalid_grant',
+                    error_description: 'Authorization code expired',
                 }),
-            )
+            } as Response)
 
             const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
             const provider = createOutlineAuthProvider()
@@ -152,16 +152,13 @@ describe('OutlineAuthProvider', () => {
     })
 
     describe('validateToken', () => {
-        it('calls auth.info with handshake base URL + token and returns an OutlineAccount', async () => {
-            const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
-            ;(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue({
-                ok: true,
-                json: async () => ({
-                    data: {
-                        user: { id: 'user-uuid', name: 'Ada Lovelace', email: 'ada@example.com' },
-                        team: { name: 'Analytics', subdomain: 'analytics' },
-                    },
-                }),
+        it('calls auth.info with the unsaved token + handshake base URL and returns an OutlineAccount', async () => {
+            const { apiRequest } = await import('../lib/api.js')
+            vi.mocked(apiRequest).mockResolvedValue({
+                data: {
+                    user: { id: 'user-uuid', name: 'Ada Lovelace', email: 'ada@example.com' },
+                    team: { name: 'Analytics', subdomain: 'analytics' },
+                },
             })
 
             const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
@@ -183,10 +180,12 @@ describe('OutlineAuthProvider', () => {
                 teamName: 'Analytics',
             })
 
-            expect(fetchWithRetry).toHaveBeenCalledTimes(1)
-            const args = (fetchWithRetry as ReturnType<typeof vi.fn>).mock.calls[0][0]
-            expect(args.url).toBe('https://wiki.example.com/api/auth.info')
-            expect(args.options.headers.Authorization).toBe('Bearer tok-abc')
+            expect(apiRequest).toHaveBeenCalledTimes(1)
+            expect(apiRequest).toHaveBeenCalledWith(
+                'auth.info',
+                {},
+                { token: 'tok-abc', baseUrl: 'https://wiki.example.com' },
+            )
         })
     })
 })
@@ -222,12 +221,14 @@ describe('OutlineTokenStore', () => {
         )
 
         const got = await store.active()
-        expect(got).not.toBeNull()
         expect(got?.token).toBe('tok-persisted')
-        expect(got?.account.id).toBe('user-uuid')
-        expect(got?.account.label).toBe('Ada')
-        expect(got?.account.baseUrl).toBe('https://wiki.example.com')
-        expect(got?.account.oauthClientId).toBe('cid-xyz')
+        expect(got?.account).toEqual({
+            id: 'user-uuid',
+            label: 'Ada',
+            baseUrl: 'https://wiki.example.com',
+            oauthClientId: 'cid-xyz',
+            teamName: 'Analytics',
+        })
     })
 
     it('active returns null when config has a token but no persisted identity', async () => {
@@ -243,7 +244,7 @@ describe('OutlineTokenStore', () => {
         await expect(store.active()).resolves.toBeNull()
     })
 
-    it('clear removes auth fields', async () => {
+    it('clear removes all auth fields from the saved config', async () => {
         const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
         const store = createOutlineTokenStore()
         await store.set(
@@ -256,7 +257,39 @@ describe('OutlineTokenStore', () => {
             },
             'tok',
         )
+
+        // Sanity: the file is populated with every auth key before clear.
+        const before = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
+        expect(before).toMatchObject({
+            api_token: 'tok',
+            base_url: 'https://x',
+            oauth_client_id: 'c',
+            auth_user_id: 'u',
+            auth_user_name: 'l',
+            auth_team_name: 't',
+        })
+
         await store.clear()
-        await expect(store.active()).resolves.toBeNull()
+
+        // Every auth-related key must be gone from the on-disk config.
+        const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
+        expect(after).not.toHaveProperty('api_token')
+        expect(after).not.toHaveProperty('base_url')
+        expect(after).not.toHaveProperty('oauth_client_id')
+        expect(after).not.toHaveProperty('auth_user_id')
+        expect(after).not.toHaveProperty('auth_user_name')
+        expect(after).not.toHaveProperty('auth_team_name')
+    })
+
+    it('clear preserves non-auth config keys', async () => {
+        writeFileSync(
+            TEST_CONFIG_PATH,
+            JSON.stringify({ api_token: 'tok', auth_user_id: 'u', update_channel: 'pre-release' }),
+        )
+        const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+        const store = createOutlineTokenStore()
+        await store.clear()
+        const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
+        expect(after).toEqual({ update_channel: 'pre-release' })
     })
 })

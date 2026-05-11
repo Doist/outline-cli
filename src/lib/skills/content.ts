@@ -76,6 +76,7 @@ ol auth login                          # OAuth login (opens browser); prompts fo
 ol auth login --base-url <url>         # Specify Outline base URL for this login (saved for future use)
 ol auth login --client-id <id>         # Specify OAuth client ID for this login (saved for future use)
 ol auth login --callback-port <port>   # Override local OAuth callback port
+ol auth login --read-only              # Request read-only scopes (where supported by the Outline instance)
 ol auth login --json | --ndjson        # Machine-readable success envelope
 ol auth status                         # Show current auth state
 ol auth logout                         # Clear saved credentials

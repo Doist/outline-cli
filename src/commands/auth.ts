@@ -14,6 +14,16 @@ type AuthInfoResponse = {
     team: { name: string; subdomain: string }
 }
 
+function resolvePreferredCallbackPort(): number {
+    const raw = process.env.OUTLINE_OAUTH_CALLBACK_PORT?.trim()
+    if (!raw) return DEFAULT_OAUTH_CALLBACK_PORT
+    const parsed = Number(raw)
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+        return DEFAULT_OAUTH_CALLBACK_PORT
+    }
+    return parsed
+}
+
 export function registerAuthCommand(program: Command): void {
     const auth = program.command('auth').description('Manage authentication')
 
@@ -23,7 +33,7 @@ export function registerAuthCommand(program: Command): void {
     attachLoginCommand(auth, {
         provider,
         store,
-        preferredPort: DEFAULT_OAUTH_CALLBACK_PORT,
+        preferredPort: resolvePreferredCallbackPort(),
         resolveScopes: () => [],
         renderSuccess,
         renderError,

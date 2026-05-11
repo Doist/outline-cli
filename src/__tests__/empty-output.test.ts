@@ -7,7 +7,6 @@ vi.mock('../lib/auth.js', () => ({
     getBaseUrl: async () => 'https://test.outline.com',
     getOAuthClientId: async () => undefined,
     getTokenSource: async () => 'config' as const,
-    saveConfig: vi.fn(),
     clearConfig: vi.fn(),
 }))
 

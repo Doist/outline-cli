@@ -58,12 +58,16 @@ describe('auth', () => {
         await expect(getBaseUrl()).resolves.toBe('https://app.getoutline.com')
     })
 
-    it('saveConfig and clearConfig work', async () => {
-        const { saveConfig, clearConfig, getApiToken, getOAuthClientId } =
-            await import('../lib/auth.js')
-        await saveConfig('test-token', 'https://wiki.test.com', 'client-id')
-        await expect(getApiToken()).resolves.toBe('test-token')
-        await expect(getOAuthClientId()).resolves.toBe('client-id')
+    it('clearConfig removes the saved token', async () => {
+        writeFileSync(
+            TEST_CONFIG_PATH,
+            JSON.stringify({
+                api_token: 'test-token',
+                base_url: 'https://wiki.test.com',
+                oauth_client_id: 'client-id',
+            }),
+        )
+        const { clearConfig, getApiToken } = await import('../lib/auth.js')
         await clearConfig()
         await expect(getApiToken()).rejects.toThrow()
     })

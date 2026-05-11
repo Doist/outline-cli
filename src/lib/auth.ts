@@ -1,4 +1,4 @@
-import { type Config, getConfig, setConfig, updateConfig } from './config.js'
+import { type Config, getConfig, setConfig } from './config.js'
 
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
@@ -37,17 +37,6 @@ export async function getTokenSource(): Promise<'env' | 'config' | null> {
     return null
 }
 
-export async function saveConfig(
-    token: string,
-    baseUrl?: string,
-    oauthClientId?: string,
-): Promise<void> {
-    const updates: Partial<Config> = { api_token: token }
-    if (baseUrl) updates.base_url = baseUrl.replace(/\/$/, '')
-    if (oauthClientId) updates.oauth_client_id = oauthClientId
-    await updateConfig(updates)
-}
-
 /**
  * Clear the auth-related keys without deleting the file. The config is now
  * shared with non-auth settings (notably `update_channel`); a blanket unlink
@@ -55,11 +44,20 @@ export async function saveConfig(
  */
 export async function clearConfig(): Promise<void> {
     const existing = await getConfig()
-    const { api_token, base_url, oauth_client_id, auth_user_id, auth_user_name, ...rest } = existing
+    const {
+        api_token,
+        base_url,
+        oauth_client_id,
+        auth_user_id,
+        auth_user_name,
+        auth_team_name,
+        ...rest
+    } = existing
     void api_token
     void base_url
     void oauth_client_id
     void auth_user_id
     void auth_user_name
+    void auth_team_name
     await setConfig(rest as Config)
 }
