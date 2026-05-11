@@ -1,7 +1,9 @@
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import packageJson from '../../package.json' with { type: 'json' }
 
 const registerCoreUpdateCommandMock = vi.fn()
+const withSpinnerMock = vi.fn((_opts: unknown, fn: () => Promise<unknown>) => fn())
 
 vi.mock('@doist/cli-core/commands', () => ({
     registerUpdateCommand: registerCoreUpdateCommandMock,
@@ -12,7 +14,7 @@ vi.mock('../lib/config.js', () => ({
 }))
 
 vi.mock('../lib/spinner.js', () => ({
-    withSpinner: vi.fn((_opts: unknown, fn: () => Promise<unknown>) => fn()),
+    withSpinner: withSpinnerMock,
 }))
 
 describe('ol update wiring', () => {
@@ -37,7 +39,7 @@ describe('ol update wiring', () => {
             configPath: '/tmp/outline-cli-test/config.json',
             changelogCommandName: 'ol changelog',
         })
-        expect(typeof options.currentVersion).toBe('string')
-        expect(typeof options.withSpinner).toBe('function')
+        expect(options.currentVersion).toBe(packageJson.version)
+        expect(options.withSpinner).toBe(withSpinnerMock)
     })
 })

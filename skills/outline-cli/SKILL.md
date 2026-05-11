@@ -83,6 +83,7 @@ ol auth logout                # Clear saved credentials
 ol update                        # Update CLI to latest version
 ol update --check                # Check for updates without installing, show channel
 ol update --check --json         # Check for updates as a JSON envelope
+ol update --check --ndjson       # Check for updates as NDJSON output
 ol update --channel              # Show current update channel
 ol update switch --stable        # Switch to stable release channel
 ol update switch --pre-release   # Switch to pre-release (next) channel
