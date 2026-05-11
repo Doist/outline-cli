@@ -14,11 +14,13 @@ export type Config = CoreConfig & {
     oauth_client_id?: string
 }
 
-let cachedPath: string | null = null
-
+/**
+ * Resolve the canonical config path on every call. Caching at module load
+ * would pin the path to the unmocked `node:os.homedir` before vitest's
+ * `vi.mock('node:os', …)` hoist takes effect in a fresh test file.
+ */
 export function getConfigPath(): string {
-    if (!cachedPath) cachedPath = coreGetConfigPath(APP_NAME)
-    return cachedPath
+    return coreGetConfigPath(APP_NAME)
 }
 
 export async function getConfig(): Promise<Partial<Config>> {
