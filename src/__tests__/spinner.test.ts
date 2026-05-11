@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createSpinnerMock = vi.fn(() => ({
     LoadingSpinner: class {
@@ -24,10 +24,59 @@ vi.mock('@doist/cli-core', async (importOriginal) => {
 })
 
 describe('spinner wiring', () => {
-    it('builds the kit with the OL-specific isDisabled gate', async () => {
+    beforeEach(() => {
+        delete process.env.OL_SPINNER
+        delete process.env.CI
+        process.argv = ['node', 'ol']
+    })
+
+    afterEach(() => {
+        delete process.env.OL_SPINNER
+        delete process.env.CI
+        process.argv = ['node', 'ol']
+    })
+
+    async function loadIsDisabled(): Promise<() => boolean> {
+        vi.resetModules()
+        createSpinnerMock.mockClear()
         await import('../lib/spinner.js')
-        expect(createSpinnerMock).toHaveBeenCalledTimes(1)
-        const config = createSpinnerMock.mock.calls[0]?.[0] as { isDisabled?: () => boolean }
-        expect(typeof config.isDisabled).toBe('function')
+        expect(createSpinnerMock).toHaveBeenCalledWith(
+            expect.objectContaining({ isDisabled: expect.any(Function) }),
+        )
+        return createSpinnerMock.mock.calls[0]![0]!.isDisabled!
+    }
+
+    it('does not disable by default', async () => {
+        expect((await loadIsDisabled())()).toBe(false)
+    })
+
+    it('disables when OL_SPINNER=false', async () => {
+        process.env.OL_SPINNER = 'false'
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('disables when CI=1', async () => {
+        process.env.CI = '1'
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('honours CI=false as an opt-out (does not disable)', async () => {
+        process.env.CI = 'false'
+        expect((await loadIsDisabled())()).toBe(false)
+    })
+
+    it('disables when --json is in argv', async () => {
+        process.argv = ['node', 'ol', 'search', 'foo', '--json']
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('disables when --ndjson is in argv', async () => {
+        process.argv = ['node', 'ol', 'search', 'foo', '--ndjson']
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('disables when --no-spinner is in argv', async () => {
+        process.argv = ['node', 'ol', 'auth', 'status', '--no-spinner']
+        expect((await loadIsDisabled())()).toBe(true)
     })
 })

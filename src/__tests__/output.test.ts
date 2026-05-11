@@ -38,11 +38,14 @@ describe('output', () => {
 
     it('outputList ndjson mode', () => {
         outputList([item, { ...item, id: '2' }], formatter, keys, { ndjson: true })
-        expect(logs).toHaveLength(1)
-        const lines = logs[0].split('\n')
-        expect(lines).toHaveLength(2)
-        expect(JSON.parse(lines[0])).toEqual({ id: '1', name: 'Test' })
-        expect(JSON.parse(lines[1])).toEqual({ id: '2', name: 'Test' })
+        const records = logs
+            .flatMap((line) => line.split('\n'))
+            .filter(Boolean)
+            .map((line) => JSON.parse(line))
+        expect(records).toEqual([
+            { id: '1', name: 'Test' },
+            { id: '2', name: 'Test' },
+        ])
     })
 
     it('getOutputOptions parses flags', () => {

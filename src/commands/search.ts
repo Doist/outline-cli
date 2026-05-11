@@ -54,7 +54,10 @@ export function registerSearchCommand(program: Command): void {
             const { data, pagination } = await apiRequest<SearchResult[]>('documents.search', body)
 
             const outputOpts = getOutputOptions(opts)
-            const formatResult = makeFormatResult(await getBaseUrl())
+            const formatResult =
+                outputOpts.json || outputOpts.ndjson
+                    ? () => ''
+                    : makeFormatResult(await getBaseUrl())
             outputList(data, formatResult, essentialKeys, outputOpts, pagination)
         })
 }

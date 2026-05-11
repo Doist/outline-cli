@@ -1,5 +1,4 @@
-import { unlink } from 'node:fs/promises'
-import { type Config, getConfig, getConfigPath, setConfig } from './config.js'
+import { type Config, getConfig, setConfig, updateConfig } from './config.js'
 
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
@@ -43,24 +42,22 @@ export async function saveConfig(
     baseUrl?: string,
     oauthClientId?: string,
 ): Promise<void> {
-    const existing = await getConfig()
-    const config: Config = {
-        ...existing,
-        api_token: token,
-    }
-    if (baseUrl) {
-        config.base_url = baseUrl.replace(/\/$/, '')
-    }
-    if (oauthClientId) {
-        config.oauth_client_id = oauthClientId
-    }
-    await setConfig(config)
+    const updates: Partial<Config> = { api_token: token }
+    if (baseUrl) updates.base_url = baseUrl.replace(/\/$/, '')
+    if (oauthClientId) updates.oauth_client_id = oauthClientId
+    await updateConfig(updates)
 }
 
+/**
+ * Clear the auth-related keys without deleting the file. The config is now
+ * shared with non-auth settings (notably `update_channel`); a blanket unlink
+ * would silently reset the user's update-channel preference too.
+ */
 export async function clearConfig(): Promise<void> {
-    try {
-        await unlink(getConfigPath())
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    }
+    const existing = await getConfig()
+    const { api_token, base_url, oauth_client_id, ...rest } = existing
+    void api_token
+    void base_url
+    void oauth_client_id
+    await setConfig(rest as Config)
 }

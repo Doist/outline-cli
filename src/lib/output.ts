@@ -42,16 +42,16 @@ export function outputList<T extends object>(
     opts: OutputOptions = {},
     pagination?: Pagination,
 ): void {
+    const project = (item: T) => (opts.full || !essentialKeys ? item : pick(item, essentialKeys))
+
     if (opts.ndjson) {
-        const data = items.map((item) =>
-            opts.full || !essentialKeys ? item : pick(item, essentialKeys),
-        )
-        if (data.length > 0) console.log(formatNdjson(data))
+        // Stream item-by-item: avoids buffering the whole list and matches
+        // the canonical NDJSON contract (one record per write).
+        for (const item of items) {
+            console.log(formatNdjson([project(item)]))
+        }
     } else if (opts.json) {
-        const data = items.map((item) =>
-            opts.full || !essentialKeys ? item : pick(item, essentialKeys),
-        )
-        console.log(formatJson(data))
+        console.log(formatJson(items.map(project)))
     } else {
         for (const item of items) {
             console.log(humanFormatter(item))

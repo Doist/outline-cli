@@ -11,8 +11,6 @@ export type ErrorCode =
     | 'OAUTH_CLIENT_ID_REQUIRED'
     | 'OAUTH_LOGIN_FAILED'
     | 'UNKNOWN_AGENT'
-    // Allow any string while preserving intellisense for known codes.
-    | (string & {})
 
 export class CliError extends CoreCliError<ErrorCode> {
     constructor(
