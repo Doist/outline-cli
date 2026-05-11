@@ -79,4 +79,24 @@ describe('spinner wiring', () => {
         process.argv = ['node', 'ol', 'auth', 'status', '--no-spinner']
         expect((await loadIsDisabled())()).toBe(true)
     })
+
+    it('disables when --progress-jsonl is in argv', async () => {
+        process.argv = ['node', 'ol', 'search', 'foo', '--progress-jsonl']
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('disables when --progress-jsonl=path is in argv', async () => {
+        process.argv = ['node', 'ol', 'search', 'foo', '--progress-jsonl=/tmp/p.jsonl']
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('disables when --verbose is in argv', async () => {
+        process.argv = ['node', 'ol', 'search', 'foo', '--verbose']
+        expect((await loadIsDisabled())()).toBe(true)
+    })
+
+    it('disables when -v short flag is in argv', async () => {
+        process.argv = ['node', 'ol', 'search', 'foo', '-v']
+        expect((await loadIsDisabled())()).toBe(true)
+    })
 })

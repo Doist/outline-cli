@@ -1,10 +1,8 @@
-import { formatJson, formatNdjson } from '@doist/cli-core'
+import { formatJson, formatNdjson, printEmpty, type ViewOptions } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
 
-interface OutputOptions {
-    json?: boolean
-    ndjson?: boolean
+export type OutputOptions = ViewOptions & {
     full?: boolean
 }
 
@@ -41,7 +39,13 @@ export function outputList<T extends object>(
     essentialKeys?: (keyof T)[],
     opts: OutputOptions = {},
     pagination?: Pagination,
+    emptyMessage?: string,
 ): void {
+    if (items.length === 0 && emptyMessage !== undefined) {
+        printEmpty({ options: opts, message: emptyMessage })
+        return
+    }
+
     const project = (item: T) => (opts.full || !essentialKeys ? item : pick(item, essentialKeys))
 
     if (opts.ndjson) {

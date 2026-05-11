@@ -79,7 +79,14 @@ export function registerDocumentCommand(program: Command): void {
 
             const { data, pagination } = await apiRequest<Document[]>('documents.list', body)
 
-            outputList(data, formatDoc, essentialKeys, getOutputOptions(opts), pagination)
+            outputList(
+                data,
+                formatDoc,
+                essentialKeys,
+                getOutputOptions(opts),
+                pagination,
+                'No documents found.',
+            )
         })
 
     doc.command('get <id>')
