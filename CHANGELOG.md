@@ -1,3 +1,9 @@
+## [1.6.0](https://github.com/Doist/outline-cli/compare/v1.5.3...v1.6.0) (2026-05-15)
+
+### Features
+
+* **auth:** adopt cli-core 0.12.0 multi-user TokenStore shape ([#71](https://github.com/Doist/outline-cli/issues/71)) ([53487b7](https://github.com/Doist/outline-cli/commit/53487b707b9a980c401ef19b3e37c08299aa6abe))
+
 ## [1.5.3](https://github.com/Doist/outline-cli/compare/v1.5.2...v1.5.3) (2026-05-11)
 
 ### Bug Fixes
