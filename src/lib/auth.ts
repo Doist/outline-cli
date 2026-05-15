@@ -41,9 +41,13 @@ export async function getTokenSource(): Promise<'env' | 'config' | null> {
  * Clear the auth-related keys without deleting the file. The config is now
  * shared with non-auth settings (notably `update_channel`); a blanket unlink
  * would silently reset the user's update-channel preference too.
+ *
+ * Pass `existing` to skip the read when the caller has already loaded the
+ * config (e.g. ref-validated logout) — keeps that flow at one read + one
+ * write instead of two reads.
  */
-export async function clearConfig(): Promise<void> {
-    const existing = await getConfig()
+export async function clearConfig(existing?: Partial<Config>): Promise<void> {
+    const config = existing ?? (await getConfig())
     const {
         api_token,
         base_url,
@@ -52,7 +56,7 @@ export async function clearConfig(): Promise<void> {
         auth_user_name,
         auth_team_name,
         ...rest
-    } = existing
+    } = config
     void api_token
     void base_url
     void oauth_client_id

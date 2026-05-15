@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline/promises'
 import {
+    type AccountRef,
     type AuthAccount,
     type AuthProvider,
     deriveChallenge,
@@ -9,7 +10,8 @@ import {
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
 import { clearConfig, getBaseUrl, getOAuthClientId } from './auth.js'
-import { getConfig, updateConfig } from './config.js'
+import { type Config, getConfig, updateConfig } from './config.js'
+import { CliError } from './errors.js'
 
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
@@ -160,29 +162,54 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
 }
 
 export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
+    /**
+     * Derive a snapshot from an already-loaded config. Pure, so ref-aware
+     * callers can validate without a second config read.
+     */
+    function deriveSnapshot(
+        config: Partial<Config>,
+    ): { token: string; account: OutlineAccount } | null {
+        if (!config.api_token) return null
+        const id = config.auth_user_id
+        const label = config.auth_user_name
+        if (!id || !label) {
+            // Stored token predates this adapter (env var, pre-upgrade
+            // config). No persisted identity to round-trip.
+            return null
+        }
+        return {
+            token: config.api_token,
+            account: {
+                id,
+                label,
+                baseUrl: config.base_url ?? DEFAULT_BASE_URL,
+                oauthClientId: config.oauth_client_id ?? '',
+                teamName: config.auth_team_name,
+            },
+        }
+    }
+
+    /**
+     * Match the stored account against `--user <ref>`. Outline accounts use
+     * UUID ids and a display name — id matches are case-sensitive (UUIDs
+     * are canonical), label matches are case-insensitive so users can pass
+     * the name they see in `auth status` regardless of casing.
+     */
+    function matchesRef(account: OutlineAccount, ref: AccountRef): boolean {
+        if (account.id === ref) return true
+        return account.label.toLowerCase() === ref.toLowerCase()
+    }
+
+    function refMismatch(ref: AccountRef): CliError {
+        return new CliError('ACCOUNT_NOT_FOUND', `No stored account matches "${ref}".`)
+    }
+
     return {
-        async active() {
-            const config = await getConfig()
-            if (!config.api_token) return null
-            const baseUrl = config.base_url ?? DEFAULT_BASE_URL
-            const oauthClientId = config.oauth_client_id ?? ''
-            const id = config.auth_user_id
-            const label = config.auth_user_name
-            if (!id || !label) {
-                // Stored token predates this adapter (env var, pre-upgrade
-                // config). No persisted identity to round-trip.
-                return null
-            }
-            return {
-                token: config.api_token,
-                account: {
-                    id,
-                    label,
-                    baseUrl,
-                    oauthClientId,
-                    teamName: config.auth_team_name,
-                },
-            }
+        async active(ref?: AccountRef) {
+            const snapshot = deriveSnapshot(await getConfig())
+            if (ref === undefined) return snapshot
+            if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
+            return snapshot
         },
         async set(account, token) {
             await updateConfig({
@@ -194,8 +221,27 @@ export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
                 auth_team_name: account.teamName,
             })
         },
-        async clear() {
-            await clearConfig()
+        async clear(ref?: AccountRef) {
+            // With `ref`, validate before touching storage so a mismatch is
+            // an `ACCOUNT_NOT_FOUND` error rather than a silent success —
+            // `attachLogoutCommand` treats any non-throwing `clear()` as
+            // success. Load the config once and hand it to `clearConfig`
+            // so ref-based logout stays at one read + one write.
+            const config = await getConfig()
+            if (ref !== undefined) {
+                const snapshot = deriveSnapshot(config)
+                if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
+            }
+            await clearConfig(config)
+        },
+        async list() {
+            const snapshot = deriveSnapshot(await getConfig())
+            return snapshot ? [{ account: snapshot.account, isDefault: true }] : []
+        },
+        async setDefault(ref: AccountRef) {
+            const snapshot = deriveSnapshot(await getConfig())
+            if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
+            // Single-user store — already the default once `ref` matches.
         },
     }
 }
