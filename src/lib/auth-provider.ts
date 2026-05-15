@@ -10,7 +10,7 @@ import {
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
 import { clearConfig, getBaseUrl, getOAuthClientId } from './auth.js'
-import { getConfig, updateConfig } from './config.js'
+import { type Config, getConfig, updateConfig } from './config.js'
 import { CliError } from './errors.js'
 
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
@@ -162,11 +162,13 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
 }
 
 export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
-    async function loadStoredSnapshot(): Promise<{
-        token: string
-        account: OutlineAccount
-    } | null> {
-        const config = await getConfig()
+    /**
+     * Derive a snapshot from an already-loaded config. Pure, so ref-aware
+     * callers can validate without a second config read.
+     */
+    function deriveSnapshot(
+        config: Partial<Config>,
+    ): { token: string; account: OutlineAccount } | null {
         if (!config.api_token) return null
         const id = config.auth_user_id
         const label = config.auth_user_name
@@ -198,25 +200,16 @@ export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
         return account.label.toLowerCase() === ref.toLowerCase()
     }
 
-    /**
-     * Single source of truth for ref-aware lookups. Returns the snapshot
-     * when `ref` matches the stored account, throws `ACCOUNT_NOT_FOUND`
-     * otherwise (including when nothing is stored).
-     */
-    async function resolveByRef(
-        ref: AccountRef,
-    ): Promise<{ token: string; account: OutlineAccount }> {
-        const snapshot = await loadStoredSnapshot()
-        if (!snapshot || !matchesRef(snapshot.account, ref)) {
-            throw new CliError('ACCOUNT_NOT_FOUND', `No stored account matches "${ref}".`)
-        }
-        return snapshot
+    function refMismatch(ref: AccountRef): CliError {
+        return new CliError('ACCOUNT_NOT_FOUND', `No stored account matches "${ref}".`)
     }
 
     return {
         async active(ref?: AccountRef) {
-            if (ref === undefined) return loadStoredSnapshot()
-            return resolveByRef(ref)
+            const snapshot = deriveSnapshot(await getConfig())
+            if (ref === undefined) return snapshot
+            if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
+            return snapshot
         },
         async set(account, token) {
             await updateConfig({
@@ -232,18 +225,22 @@ export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
             // With `ref`, validate before touching storage so a mismatch is
             // an `ACCOUNT_NOT_FOUND` error rather than a silent success —
             // `attachLogoutCommand` treats any non-throwing `clear()` as
-            // success.
+            // success. Load the config once and hand it to `clearConfig`
+            // so ref-based logout stays at one read + one write.
+            const config = await getConfig()
             if (ref !== undefined) {
-                await resolveByRef(ref)
+                const snapshot = deriveSnapshot(config)
+                if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
             }
-            await clearConfig()
+            await clearConfig(config)
         },
         async list() {
-            const snapshot = await loadStoredSnapshot()
+            const snapshot = deriveSnapshot(await getConfig())
             return snapshot ? [{ account: snapshot.account, isDefault: true }] : []
         },
         async setDefault(ref: AccountRef) {
-            await resolveByRef(ref)
+            const snapshot = deriveSnapshot(await getConfig())
+            if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
             // Single-user store — already the default once `ref` matches.
         },
     }
