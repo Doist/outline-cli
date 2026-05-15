@@ -4,6 +4,7 @@ export { CoreCliError as BaseCliError }
 export type { ErrorType } from '@doist/cli-core'
 
 export type ErrorCode =
+    | 'ACCOUNT_NOT_FOUND'
     | 'AUTH_VERIFICATION_FAILED'
     | 'CONFIRMATION_REQUIRED'
     | 'CONFLICTING_OPTIONS'

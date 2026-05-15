@@ -176,4 +176,103 @@ describe('OutlineTokenStore', () => {
         const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
         expect(after).toEqual({ update_channel: 'pre-release' })
     })
+
+    describe('ref-aware lookups', () => {
+        const STORED_CONFIG = {
+            api_token: 'tok',
+            base_url: 'https://wiki.example.com',
+            oauth_client_id: 'cid-xyz',
+            auth_user_id: 'user-uuid',
+            auth_user_name: 'Ada',
+            auth_team_name: 'Analytics',
+        }
+        const STORED_ACCOUNT = {
+            id: 'user-uuid',
+            label: 'Ada',
+            baseUrl: 'https://wiki.example.com',
+            oauthClientId: 'cid-xyz',
+            teamName: 'Analytics',
+        }
+
+        it('active(ref) returns the snapshot when the id ref matches', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            expect(await createOutlineTokenStore().active('user-uuid')).toEqual({
+                token: 'tok',
+                account: STORED_ACCOUNT,
+            })
+        })
+
+        it('active(ref) matches the stored label case-insensitively', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            expect(await createOutlineTokenStore().active('ADA')).toEqual({
+                token: 'tok',
+                account: STORED_ACCOUNT,
+            })
+        })
+
+        it('active(ref) throws ACCOUNT_NOT_FOUND on mismatch', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            await expect(createOutlineTokenStore().active('other')).rejects.toMatchObject({
+                code: 'ACCOUNT_NOT_FOUND',
+            })
+        })
+
+        it('active(ref) throws ACCOUNT_NOT_FOUND when no token is stored', async () => {
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            await expect(createOutlineTokenStore().active('user-uuid')).rejects.toMatchObject({
+                code: 'ACCOUNT_NOT_FOUND',
+            })
+        })
+
+        it('clear(ref) clears the config when the ref matches', async () => {
+            writeFileSync(
+                TEST_CONFIG_PATH,
+                JSON.stringify({ ...STORED_CONFIG, update_channel: 'stable' }),
+            )
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            await createOutlineTokenStore().clear('user-uuid')
+            const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
+            expect(after).toEqual({ update_channel: 'stable' })
+        })
+
+        it('clear(ref) throws ACCOUNT_NOT_FOUND on mismatch and does not touch storage', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            await expect(createOutlineTokenStore().clear('other')).rejects.toMatchObject({
+                code: 'ACCOUNT_NOT_FOUND',
+            })
+            const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
+            expect(after).toEqual(STORED_CONFIG)
+        })
+
+        it('list() returns the stored account flagged as default', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            expect(await createOutlineTokenStore().list()).toEqual([
+                { account: STORED_ACCOUNT, isDefault: true },
+            ])
+        })
+
+        it('list() returns an empty array when no token is stored', async () => {
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            expect(await createOutlineTokenStore().list()).toEqual([])
+        })
+
+        it('setDefault(ref) resolves silently when the ref matches', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            await expect(createOutlineTokenStore().setDefault('user-uuid')).resolves.toBeUndefined()
+        })
+
+        it('setDefault(ref) throws ACCOUNT_NOT_FOUND when the ref does not match', async () => {
+            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(STORED_CONFIG))
+            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+            await expect(createOutlineTokenStore().setDefault('other')).rejects.toMatchObject({
+                code: 'ACCOUNT_NOT_FOUND',
+            })
+        })
+    })
 })
