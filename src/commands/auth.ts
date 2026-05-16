@@ -1,17 +1,26 @@
-import { attachLoginCommand } from '@doist/cli-core/auth'
+import { attachLoginCommand, attachLogoutCommand, attachStatusCommand } from '@doist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'
 import { renderError, renderSuccess } from '../lib/auth-pages.js'
-import { createOutlineAuthProvider, createOutlineTokenStore } from '../lib/auth-provider.js'
-import { clearConfig, getBaseUrl, getTokenSource } from '../lib/auth.js'
-import { formatError } from '../lib/output.js'
+import {
+    createOutlineAuthProvider,
+    createOutlineTokenStore,
+    type OutlineAccount,
+} from '../lib/auth-provider.js'
+import { getTokenSource } from '../lib/auth.js'
+import { CliError } from '../lib/errors.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 
 type AuthInfoResponse = {
-    user: { name: string; email: string }
+    user: { id: string; name: string; email: string }
     team: { name: string; subdomain: string }
+}
+
+type StatusData = {
+    info: AuthInfoResponse
+    source: 'env' | 'config'
 }
 
 function resolvePreferredCallbackPort(): number {
@@ -52,42 +61,69 @@ export function registerAuthCommand(program: Command): void {
             'OAuth client ID to use for this login (saved for future logins)',
         )
 
-    auth.command('status')
-        .description('Show current authentication state')
-        .action(async () => {
-            const source = await getTokenSource()
-            if (!source) {
-                console.log(chalk.yellow('Not authenticated. Run: ol auth login'))
-                return
-            }
+    // `attachStatusCommand` guarantees `fetchLive` runs before `renderText` /
+    // `renderJson` within a single invocation, so the stash is always
+    // populated by the time the render hooks read it.
+    let statusData: StatusData | null = null
 
-            console.log(chalk.dim(`Token source: ${source}`))
-            console.log(chalk.dim(`Base URL: ${await getBaseUrl()}`))
-
+    attachStatusCommand<OutlineAccount>(auth, {
+        store,
+        description: 'Show current authentication state',
+        async fetchLive({ token, account }) {
             try {
-                const { data } = await apiRequest<AuthInfoResponse>('auth.info')
-                console.log(`Team: ${chalk.bold(data.team.name)}`)
-                console.log(`User: ${data.user.name} (${data.user.email})`)
-            } catch (err) {
-                console.error(
-                    formatError(
-                        'AUTH_VERIFICATION_FAILED',
-                        `Could not fetch auth info: ${(err as Error).message}`,
-                        [
-                            'Check that your API token is valid',
-                            'Verify the base URL is correct',
-                            "Run 'ol auth login' to re-authenticate",
-                        ],
+                const [{ data: info }, source] = await Promise.all([
+                    apiRequest<AuthInfoResponse>(
+                        'auth.info',
+                        {},
+                        { token, baseUrl: account.baseUrl },
                     ),
-                )
-                process.exit(1)
+                    getTokenSource(),
+                ])
+                statusData = { info, source: source ?? 'config' }
+                return {
+                    ...account,
+                    id: info.user.id,
+                    label: info.user.name,
+                    teamName: info.team.name,
+                }
+            } catch (err) {
+                const message = (err as Error).message ?? ''
+                if (/\b401\b/.test(message) || /Authentication required/i.test(message)) {
+                    throw new CliError('NO_TOKEN', 'Not authenticated (token expired or invalid)', [
+                        'Run `ol auth login` to re-authenticate',
+                    ])
+                }
+                throw err
             }
-        })
+        },
+        renderText({ account }) {
+            if (!statusData) throw new Error('status renderText called before fetchLive')
+            return [
+                `${chalk.green('✓')} Authenticated`,
+                `  Team: ${chalk.bold(statusData.info.team.name)}`,
+                `  User: ${statusData.info.user.name} (${statusData.info.user.email})`,
+                `  Base URL: ${account.baseUrl}`,
+                `  Token source: ${statusData.source}`,
+            ]
+        },
+        renderJson({ account }) {
+            if (!statusData) throw new Error('status renderJson called before fetchLive')
+            return {
+                id: statusData.info.user.id,
+                name: statusData.info.user.name,
+                email: statusData.info.user.email,
+                team: statusData.info.team.name,
+                baseUrl: account.baseUrl,
+                source: statusData.source,
+            }
+        },
+        onNotAuthenticated() {
+            throw new CliError('NOT_AUTHENTICATED', 'Not authenticated. Run: ol auth login')
+        },
+    })
 
-    auth.command('logout')
-        .description('Clear saved authentication')
-        .action(async () => {
-            await clearConfig()
-            console.log('Logged out.')
-        })
+    attachLogoutCommand<OutlineAccount>(auth, {
+        store,
+        description: 'Clear saved authentication',
+    })
 }

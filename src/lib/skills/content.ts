@@ -79,7 +79,9 @@ ol auth login --callback-port <port>   # Override local OAuth callback port
 ol auth login --read-only              # Request read-only scopes (where supported by the Outline instance)
 ol auth login --json | --ndjson        # Machine-readable success envelope
 ol auth status                         # Show current auth state
+ol auth status --json | --ndjson       # Machine-readable status envelope ({id, name, email, team, baseUrl, source})
 ol auth logout                         # Clear saved credentials
+ol auth logout --json | --ndjson       # Machine-readable logout envelope ({ok: true}; --ndjson is silent)
 \`\`\`
 
 ### Update & Changelog
