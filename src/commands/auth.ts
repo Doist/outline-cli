@@ -4,22 +4,17 @@ import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'
 import { renderError, renderSuccess } from '../lib/auth-pages.js'
 import {
+    type AuthInfoResponse,
     createOutlineAuthProvider,
     createOutlineTokenStore,
     type OutlineAccount,
 } from '../lib/auth-provider.js'
-import { getTokenSource } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 
-type AuthInfoResponse = {
-    user: { id: string; name: string; email: string }
-    team: { name: string; subdomain: string }
-}
-
 type StatusData = {
-    info: AuthInfoResponse
+    email: string
     source: 'env' | 'config'
 }
 
@@ -71,15 +66,15 @@ export function registerAuthCommand(program: Command): void {
         description: 'Show current authentication state',
         async fetchLive({ token, account }) {
             try {
-                const [{ data: info }, source] = await Promise.all([
-                    apiRequest<AuthInfoResponse>(
-                        'auth.info',
-                        {},
-                        { token, baseUrl: account.baseUrl },
-                    ),
-                    getTokenSource(),
-                ])
-                statusData = { info, source: source ?? 'config' }
+                const { data: info } = await apiRequest<AuthInfoResponse>(
+                    'auth.info',
+                    {},
+                    { token, baseUrl: account.baseUrl },
+                )
+                statusData = {
+                    email: info.user.email,
+                    source: process.env.OUTLINE_API_TOKEN ? 'env' : 'config',
+                }
                 return {
                     ...account,
                     id: info.user.id,
@@ -87,7 +82,7 @@ export function registerAuthCommand(program: Command): void {
                     teamName: info.team.name,
                 }
             } catch (err) {
-                const message = (err as Error).message ?? ''
+                const message = err instanceof Error ? err.message : ''
                 if (/\b401\b/.test(message) || /Authentication required/i.test(message)) {
                     throw new CliError('NO_TOKEN', 'Not authenticated (token expired or invalid)', [
                         'Run `ol auth login` to re-authenticate',
@@ -100,8 +95,8 @@ export function registerAuthCommand(program: Command): void {
             if (!statusData) throw new Error('status renderText called before fetchLive')
             return [
                 `${chalk.green('✓')} Authenticated`,
-                `  Team: ${chalk.bold(statusData.info.team.name)}`,
-                `  User: ${statusData.info.user.name} (${statusData.info.user.email})`,
+                `  Team: ${chalk.bold(account.teamName ?? '')}`,
+                `  User: ${account.label} (${statusData.email})`,
                 `  Base URL: ${account.baseUrl}`,
                 `  Token source: ${statusData.source}`,
             ]
@@ -109,10 +104,8 @@ export function registerAuthCommand(program: Command): void {
         renderJson({ account }) {
             if (!statusData) throw new Error('status renderJson called before fetchLive')
             return {
-                id: statusData.info.user.id,
-                name: statusData.info.user.name,
-                email: statusData.info.user.email,
-                team: statusData.info.team.name,
+                id: account.id,
+                team: account.teamName,
                 baseUrl: account.baseUrl,
                 source: statusData.source,
             }
