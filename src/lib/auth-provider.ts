@@ -15,7 +15,7 @@ import { CliError } from './errors.js'
 
 const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
-type AuthInfoResponse = {
+export type AuthInfoResponse = {
     user: { id: string; name: string; email: string }
     team: { name: string; subdomain: string }
 }
@@ -206,6 +206,23 @@ export function createOutlineTokenStore(): TokenStore<OutlineAccount> {
 
     return {
         async active(ref?: AccountRef) {
+            // Env token wins per the `getApiToken` cascade. Surface it as a
+            // snapshot with placeholder identity fields — `status`'s
+            // `fetchLive` re-derives the canonical account from the API, so
+            // the empty id/label here are never rendered. Returning a
+            // snapshot here is what makes `attachStatusCommand` /
+            // `attachLogoutCommand` work for `OUTLINE_API_TOKEN`-only users.
+            const envToken = process.env.OUTLINE_API_TOKEN?.trim()
+            if (envToken) {
+                const account: OutlineAccount = {
+                    id: '',
+                    label: '',
+                    baseUrl: await getBaseUrl(),
+                    oauthClientId: '',
+                }
+                if (ref !== undefined && !matchesRef(account, ref)) throw refMismatch(ref)
+                return { token: envToken, account }
+            }
             const snapshot = deriveSnapshot(await getConfig())
             if (ref === undefined) return snapshot
             if (!snapshot || !matchesRef(snapshot.account, ref)) throw refMismatch(ref)
