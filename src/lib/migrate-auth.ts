@@ -80,7 +80,14 @@ export async function runMigrateLegacyAuth(
         userRecords: createOutlineUserRecordStore(),
         hasMigrated: async () => {
             const config = await getConfig()
-            return (config.config_version ?? 0) >= V2_SCHEMA_VERSION
+            // Two signals of "already on v2": the explicit marker, or
+            // the structural presence of `users[]` (a fresh install that
+            // logged in directly via cli-core writes records without ever
+            // setting `config_version`, so the marker alone would
+            // miscount that case as "needs migration").
+            if ((config.config_version ?? 0) >= V2_SCHEMA_VERSION) return true
+            if ((config.users ?? []).length > 0) return true
+            return false
         },
         markMigrated: async () => {
             await updateConfig({ config_version: V2_SCHEMA_VERSION })

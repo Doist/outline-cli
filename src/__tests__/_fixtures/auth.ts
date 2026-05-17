@@ -43,22 +43,12 @@ export const SKIPPED_RESULT: MigrateAuthResult<OutlineAccount> = {
     detail: 'offline',
 }
 
-/** Build a `Response`-shaped object whose `json()` resolves to `body`. */
+/** 200 `Response` with `body` as JSON, using the native static helper. */
 export function okResponse(body: unknown): Response {
-    return {
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => body,
-    } as Response
+    return Response.json(body)
 }
 
-/** Build an error `Response` with the given status (default 500). */
+/** Error `Response` with the given status (default 500). */
 export function errResponse(status: number, statusText = 'Error', body?: unknown): Response {
-    return {
-        ok: false,
-        status,
-        statusText,
-        json: async () => body ?? {},
-    } as Response
+    return Response.json(body ?? {}, { status, statusText })
 }

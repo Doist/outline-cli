@@ -2,19 +2,19 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SKIPPED_RESULT } from './_fixtures/auth.js'
 
 const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}-auth`)
 const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
 const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, 'config.json')
 
-// Force `identifyAccount` to fail so migration returns `skipped` and the
-// runtime falls back to the legacy plaintext snapshot — the v1 token in
-// these fixtures has no live API behind it. cli-core's secure-store is left
-// real because the env-token tests don't hit the keyring at all.
-vi.mock('../transport/fetch-with-retry.js', () => ({
-    fetchWithRetry: vi.fn(async () => {
-        throw new Error('offline (mocked)')
-    }),
+// Force a `skipped` migration so the runtime falls back to the legacy
+// plaintext snapshot — the v1 token in these fixtures has no live API
+// behind it. Mocking `runMigrateLegacyAuth` directly is more robust than
+// stubbing transitive network deps: tests don't have to know how
+// migration internally decides to skip.
+vi.mock('../lib/migrate-auth.js', () => ({
+    runMigrateLegacyAuth: vi.fn(async () => SKIPPED_RESULT),
 }))
 
 describe('auth', () => {

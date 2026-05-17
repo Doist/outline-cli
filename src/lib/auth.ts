@@ -36,13 +36,17 @@ function tokenStore(): OutlineTokenStore {
 }
 
 /**
- * Read the active token. The keyring-backed store wraps env-var precedence
- * internally and falls back to the legacy plaintext snapshot when migration
- * hasn't completed.
+ * Read the active token. Hot path: when `OUTLINE_API_TOKEN` is set we
+ * return it directly without consulting the token store, since
+ * `apiRequest` already resolves the base URL separately — going through
+ * `store.active()` here would trigger a redundant `getBaseUrl()` lookup
+ * per request just to synthesise an account we don't need.
  */
 export async function getApiToken(): Promise<string> {
+    const envToken = process.env[TOKEN_ENV_VAR]?.trim()
+    if (envToken) return envToken
     const snapshot = await tokenStore().active()
-    if (!snapshot || !snapshot.token) throw new NoTokenError()
+    if (!snapshot?.token) throw new NoTokenError()
     return snapshot.token
 }
 

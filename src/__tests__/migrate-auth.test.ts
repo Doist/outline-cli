@@ -65,6 +65,10 @@ describe('runMigrateLegacyAuth', () => {
         const args = fetchMock.fetchWithRetry.mock.calls[0][0]
         expect(args.url).toBe('https://wiki.example.com/api/auth.info')
         expect(args.options.headers.Authorization).toBe('Bearer tk_v1')
+        // Critical: timeout must be set or a stalled connection during
+        // lazy migration can hang every CLI invocation. Guards the
+        // `IDENTIFY_TIMEOUT_MS` constant in migrate-auth.ts.
+        expect(args.options.timeout).toBe(10_000)
         expect(account).toEqual({
             id: 'user-uuid',
             label: 'Ada',

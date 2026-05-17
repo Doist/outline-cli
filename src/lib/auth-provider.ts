@@ -207,17 +207,16 @@ async function readLegacyTokenSnapshot(): Promise<{
 }
 
 /**
- * Discharge v1 plaintext state. Runs **after** a successful write/clear
- * (never before) so a v2-op failure doesn't strand the user with no
- * recoverable credentials, and we can prefer the v2 store on the next
- * read regardless of whether this best-effort cleanup ran.
- *
- * Failures are swallowed because `active()` now reads the v2 store first
- * and only falls back to the legacy snapshot when the v2 store is empty —
- * a lingering `api_token` field can no longer shadow a fresh v2 write.
+ * Discharge v1 plaintext state. Runs **after** a successful v2 write/clear
+ * — never before — so a v2-op failure doesn't strand the user with no
+ * recoverable credentials. Caller decides whether to swallow or propagate
+ * the `updateConfig` failure:
+ *   - `set()` swallows (v2 record will win in `active()` regardless).
+ *   - `clear()` propagates (v2 is empty, so a stale legacy token would
+ *     shadow the logout via the fallback).
  */
 async function dischargeLegacyState(): Promise<void> {
-    await updateConfig(LEGACY_CLEAR_PAYLOAD).catch(() => undefined)
+    await updateConfig(LEGACY_CLEAR_PAYLOAD)
 }
 
 /**
@@ -255,16 +254,13 @@ export async function isLegacyAuthActive(): Promise<boolean> {
  * var, and an explicit ref means the caller targets a specific stored
  * account.
  *
- * `ensureMigrated()` runs on every stored-state op so the lazy migration
- * fires on first command. `active()` always prefers the v2 store and only
- * falls back to the legacy snapshot when the v2 store is empty *and*
- * migration is inconclusive — that ordering means a stale v1 token can
- * never shadow a successful v2 write, even if the best-effort legacy
- * cleanup has not yet run.
- *
- * `set()` / `clear()` discharge legacy state **after** the v2 op succeeds
- * (not before) so a failure in the v2 op doesn't strand the user with no
- * recoverable credentials.
+ * `ensureMigrated()` runs **before** every mutating v2 op so the post-op
+ * legacy discharge can't race a still-pending migration into re-grabbing
+ * the legacy `api_token` we just consumed. `set()` / `clear()` then
+ * discharge legacy state **after** the v2 op succeeds. `set()` swallows
+ * the cleanup failure (v2 wins in `active()` regardless); `clear()`
+ * propagates it so a failed logout fails loudly instead of leaving the
+ * user authenticated via the legacy fallback.
  */
 export function createOutlineTokenStore(): OutlineTokenStore {
     const inner = createKeyringTokenStore<OutlineAccount>({
@@ -273,11 +269,9 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         recordsLocation: getConfigPath(),
         matchAccount: matchOutlineAccount,
     })
-    async function maybeDischargeLegacy(): Promise<void> {
-        const result = await ensureMigrated()
-        if (result === null || !migrationIsConclusive(result)) {
-            await dischargeLegacyState()
-        }
+    async function migrationIsInconclusive(): Promise<boolean> {
+        const result = await ensureMigrated() // memoised
+        return result === null || !migrationIsConclusive(result)
     }
     return {
         async active(ref?: AccountRef) {
@@ -298,10 +292,6 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             const fromStore = await inner.active(ref)
             if (fromStore) return fromStore
 
-            // v2 store empty — try the legacy snapshot. We don't gate this
-            // on migration status: even on conclusive results the snapshot
-            // is just `null` (cleanupLegacyConfig already ran), so the
-            // extra read is cheap and the branch is the same.
             const legacy = await readLegacyTokenSnapshot()
             if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
                 return legacy
@@ -309,12 +299,22 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             return null
         },
         async set(account: OutlineAccount, token: string) {
+            await ensureMigrated()
             await inner.set(account, token)
-            await maybeDischargeLegacy()
+            if (await migrationIsInconclusive()) {
+                // Best-effort: a lingering `api_token` is dormant because
+                // `active()` reads v2 first.
+                await dischargeLegacyState().catch(() => undefined)
+            }
         },
         async clear(ref?: AccountRef) {
+            await ensureMigrated()
             await inner.clear(ref)
-            await maybeDischargeLegacy()
+            if (await migrationIsInconclusive()) {
+                // Must succeed: v2 is now empty, so a surviving legacy
+                // token would shadow the logout via the fallback.
+                await dischargeLegacyState()
+            }
         },
         async list() {
             await ensureMigrated()
@@ -330,18 +330,16 @@ export function createOutlineTokenStore(): OutlineTokenStore {
 }
 
 /**
- * Where the currently-active token lives. Mirrors the resolution order in
- * `active()` so the answer can never contradict the token the runtime is
- * actually using:
+ * Where the currently-active token lives. Mirrors `active()`'s resolution
+ * order — env → v2 record → legacy plaintext — so the answer can never
+ * contradict the token the runtime is actually using.
  *
- *   1. env var → `'env'`
- *   2. v2 user record present → `fallbackToken` ? `'config-file'` : `'secure-store'`
- *   3. v1 plaintext `api_token` slot → `'config-file'` (legacy snapshot)
- *   4. nothing on disk → `'secure-store'` (neutral default for fresh CLI)
- *
- * Critically the v2 record check runs **before** the v1 slot check — if a
- * stale `api_token` survives a best-effort `cleanupLegacyConfig` failure,
- * `active()` ignores it (v2 record wins), and so do we.
+ * The precedence cascade is intentionally duplicated with `active()`:
+ * the only true dedupe options either (a) add an extra config read on
+ * every `apiRequest` call (regressing the request hot path) or (b)
+ * augment cli-core's `TokenStore` contract. The drift the duplication
+ * invites is guarded by the `getActiveTokenSource` regression test that
+ * asserts v2-record presence wins over a lingering v1 `api_token`.
  */
 export async function getActiveTokenSource(): Promise<'env' | 'secure-store' | 'config-file'> {
     if (process.env[TOKEN_ENV_VAR]?.trim()) return 'env'

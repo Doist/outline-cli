@@ -355,6 +355,48 @@ describe('createOutlineTokenStore', () => {
         )
         expect(configMocks.updateConfig).not.toHaveBeenCalled()
     })
+
+    it('clear() does NOT discharge legacy state when the v2 clear fails (atomicity)', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        keyringMocks.inner.clear.mockRejectedValue(new Error('keyring boom'))
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await expect(createOutlineTokenStore().clear('user-uuid')).rejects.toThrow('keyring boom')
+        expect(configMocks.updateConfig).not.toHaveBeenCalled()
+    })
+
+    it('clear() PROPAGATES updateConfig failures (logout must be atomic, not silently partial)', async () => {
+        // If the v2 clear succeeded but the legacy discharge silently
+        // failed, the next `active()` call would fall back to the
+        // surviving plaintext `api_token` — i.e. "logout" leaves the
+        // user authenticated. Logout has to fail loudly instead.
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.updateConfig.mockRejectedValue(new Error('disk full'))
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await expect(createOutlineTokenStore().clear('user-uuid')).rejects.toThrow('disk full')
+        expect(keyringMocks.inner.clear).toHaveBeenCalledWith('user-uuid')
+    })
+
+    it('set() runs migration BEFORE the v2 write (no post-write race that re-grabs the legacy token)', async () => {
+        // Regression test for the race where ensureMigrated only fired
+        // after inner.set/clear: migration would then see the stale
+        // api_token still on disk and migrate it on top of the fresh
+        // login, either duplicating accounts or reviving auth after logout.
+        const callOrder: string[] = []
+        migrateMocks.runMigrateLegacyAuth.mockImplementation(async () => {
+            callOrder.push('migrate')
+            return { status: 'no-legacy-state' }
+        })
+        keyringMocks.inner.set.mockImplementation(async () => {
+            callOrder.push('set')
+        })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await createOutlineTokenStore().set(STORED_ACCOUNT, 'tk_new')
+
+        expect(callOrder).toEqual(['migrate', 'set'])
+    })
 })
 
 describe('matchOutlineAccount', () => {

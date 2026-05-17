@@ -40,8 +40,12 @@ function resolvePreferredCallbackPort(): number {
  * confirmation goes to stdout, any keyring-fallback warning goes to stderr.
  * Pass `isMachineOutput: true` to suppress the stdout confirmation in
  * `--json` / `--ndjson` mode while still routing the warning to stderr.
+ *
+ * Exported for direct unit testing — the alternative (driving this via
+ * mocked cli-core login/logout hooks) would require stubbing the entire
+ * store contract just to assert two console calls.
  */
-function logTokenStorageResult(
+export function logTokenStorageResult(
     result: TokenStorageResult,
     secureStoreMessage: string,
     isMachineOutput = false,

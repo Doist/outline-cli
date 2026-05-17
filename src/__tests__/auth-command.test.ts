@@ -224,3 +224,51 @@ describe('auth logout subcommand', () => {
         expect(logs).toEqual([])
     })
 })
+
+describe('logTokenStorageResult', () => {
+    function captureStreams() {
+        const logs: string[] = []
+        const errs: string[] = []
+        vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
+            logs.push(a.join(' '))
+        })
+        vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+            errs.push(a.join(' '))
+        })
+        return { logs, errs }
+    }
+
+    it('prints the secure-store confirmation to stdout in human mode', async () => {
+        const { logs, errs } = captureStreams()
+        const { logTokenStorageResult } = await import('../commands/auth.js')
+
+        logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', false)
+
+        expect(logs.some((l) => l.includes('Token stored securely'))).toBe(true)
+        expect(errs).toEqual([])
+    })
+
+    it('suppresses the stdout confirmation in machine-output mode', async () => {
+        const { logs } = captureStreams()
+        const { logTokenStorageResult } = await import('../commands/auth.js')
+
+        logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', true)
+
+        expect(logs).toEqual([])
+    })
+
+    it('routes the keyring-fallback warning to stderr (in both human and machine modes)', async () => {
+        const { logs, errs } = captureStreams()
+        const { logTokenStorageResult } = await import('../commands/auth.js')
+
+        logTokenStorageResult(
+            { storage: 'config-file', warning: 'system credential manager unavailable' },
+            'Token stored securely',
+            true,
+        )
+
+        // No stdout in machine mode, but warning still reaches operator on stderr.
+        expect(logs).toEqual([])
+        expect(errs.some((e) => e.includes('system credential manager unavailable'))).toBe(true)
+    })
+})
