@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/Doist/outline-cli/compare/v1.6.0...v1.7.0) (2026-05-17)
+
+### Features
+
+* **auth:** store API tokens in the OS keyring via @doist/cli-core ([#73](https://github.com/Doist/outline-cli/issues/73)) ([b353aea](https://github.com/Doist/outline-cli/commit/b353aeae3cdcc63308ec8de899f08c1dda23f22c))
+
 ## [1.6.0](https://github.com/Doist/outline-cli/compare/v1.5.3...v1.6.0) (2026-05-15)
 
 ### Features
