@@ -1,67 +1,82 @@
-import { type Config, getConfig, setConfig } from './config.js'
+import { SecureStoreUnavailableError } from '@doist/cli-core/auth'
+import { TOKEN_ENV_VAR } from './auth-constants.js'
+import {
+    createOutlineTokenStore,
+    getActiveTokenSource,
+    type OutlineTokenStore,
+} from './auth-provider.js'
+import { getConfig } from './config.js'
+import { CliError } from './errors.js'
+import { DEFAULT_BASE_URL } from './outline-account.js'
+import { getDefaultUserRecord } from './user-records.js'
 
-const DEFAULT_BASE_URL = 'https://app.getoutline.com'
+export { SecureStoreUnavailableError, getActiveTokenSource, TOKEN_ENV_VAR }
 
-export async function getApiToken(): Promise<string> {
-    const envToken = process.env.OUTLINE_API_TOKEN
-    if (envToken) return envToken
-
-    const config = await getConfig()
-    if (config.api_token) return config.api_token
-
-    throw new Error('No API token found. Set OUTLINE_API_TOKEN env var or run: ol auth login')
+export class NoTokenError extends CliError {
+    constructor() {
+        super(
+            'NO_TOKEN',
+            `No API token found. Set ${TOKEN_ENV_VAR} env var or run: ol auth login`,
+            [`Set ${TOKEN_ENV_VAR} or run: ol auth login`],
+            'info',
+        )
+        this.name = 'NoTokenError'
+    }
 }
 
+/**
+ * Module-level token-store singleton. Built lazily on first call; reused
+ * across every `apiRequest` so the request hot path doesn't reconstruct
+ * the keyring + user-record adapters per POST.
+ */
+let storeSingleton: OutlineTokenStore | undefined
+function tokenStore(): OutlineTokenStore {
+    if (!storeSingleton) storeSingleton = createOutlineTokenStore()
+    return storeSingleton
+}
+
+/**
+ * Read the active token. Hot path: when `OUTLINE_API_TOKEN` is set we
+ * return it directly without consulting the token store, since
+ * `apiRequest` already resolves the base URL separately — going through
+ * `store.active()` here would trigger a redundant `getBaseUrl()` lookup
+ * per request just to synthesise an account we don't need.
+ */
+export async function getApiToken(): Promise<string> {
+    const envToken = process.env[TOKEN_ENV_VAR]?.trim()
+    if (envToken) return envToken
+    const snapshot = await tokenStore().active()
+    if (!snapshot?.token) throw new NoTokenError()
+    return snapshot.token
+}
+
+/**
+ * Base URL cascade: env var → default user record (v2) → legacy
+ * `base_url` config (v1) → built-in default. The record takes priority
+ * over the legacy slot so post-migration logins keep defaulting to the
+ * same Outline instance.
+ */
 export async function getBaseUrl(): Promise<string> {
     const envUrl = process.env.OUTLINE_URL
     if (envUrl) return envUrl.replace(/\/$/, '')
 
     const config = await getConfig()
+    const record = getDefaultUserRecord(config)
+    if (record?.account.baseUrl) return record.account.baseUrl.replace(/\/$/, '')
     if (config.base_url) return config.base_url.replace(/\/$/, '')
-
     return DEFAULT_BASE_URL
 }
 
+/**
+ * OAuth client id cascade: env var → default user record (v2) → legacy
+ * `oauth_client_id` config (v1) → undefined (caller prompts).
+ */
 export async function getOAuthClientId(): Promise<string | undefined> {
     const envClientId = process.env.OUTLINE_OAUTH_CLIENT_ID
     if (envClientId) return envClientId
 
     const config = await getConfig()
+    const record = getDefaultUserRecord(config)
+    if (record?.account.oauthClientId) return record.account.oauthClientId
     return config.oauth_client_id
-}
-
-export async function getTokenSource(): Promise<'env' | 'config' | null> {
-    if (process.env.OUTLINE_API_TOKEN) return 'env'
-    const config = await getConfig()
-    if (config.api_token) return 'config'
-    return null
-}
-
-/**
- * Clear the auth-related keys without deleting the file. The config is now
- * shared with non-auth settings (notably `update_channel`); a blanket unlink
- * would silently reset the user's update-channel preference too.
- *
- * Pass `existing` to skip the read when the caller has already loaded the
- * config (e.g. ref-validated logout) — keeps that flow at one read + one
- * write instead of two reads.
- */
-export async function clearConfig(existing?: Partial<Config>): Promise<void> {
-    const config = existing ?? (await getConfig())
-    const {
-        api_token,
-        base_url,
-        oauth_client_id,
-        auth_user_id,
-        auth_user_name,
-        auth_team_name,
-        ...rest
-    } = config
-    void api_token
-    void base_url
-    void oauth_client_id
-    void auth_user_id
-    void auth_user_name
-    void auth_team_name
-    await setConfig(rest as Config)
 }

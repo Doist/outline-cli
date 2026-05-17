@@ -1,31 +1,77 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}-auth-provider`)
-const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
-const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, 'config.json')
+import {
+    LEGACY_CLEAR_PAYLOAD,
+    LEGACY_CONFIG,
+    okResponse,
+    SKIPPED_RESULT,
+    STORED_ACCOUNT,
+} from './_fixtures/auth.js'
 
 vi.mock('../transport/fetch-with-retry.js', () => ({ fetchWithRetry: vi.fn() }))
 vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
 
-beforeEach(() => {
-    process.env.XDG_CONFIG_HOME = TEST_XDG
-    mkdirSync(TEST_CONFIG_DIR, { recursive: true })
-    delete process.env.OUTLINE_API_TOKEN
-    delete process.env.OUTLINE_URL
-    delete process.env.OUTLINE_OAUTH_CLIENT_ID
+const migrateMocks = vi.hoisted(() => ({
+    runMigrateLegacyAuth: vi.fn(),
+}))
+
+vi.mock('../lib/migrate-auth.js', () => migrateMocks)
+
+const keyringMocks = vi.hoisted(() => ({
+    createKeyringTokenStore: vi.fn(),
+    inner: {
+        active: vi.fn(),
+        set: vi.fn(),
+        clear: vi.fn(),
+        list: vi.fn(),
+        setDefault: vi.fn(),
+        getLastStorageResult: vi.fn(),
+        getLastClearResult: vi.fn(),
+    },
+}))
+
+vi.mock('@doist/cli-core/auth', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@doist/cli-core/auth')>()
+    keyringMocks.createKeyringTokenStore.mockImplementation(() => keyringMocks.inner)
+    return {
+        ...actual,
+        createKeyringTokenStore: keyringMocks.createKeyringTokenStore,
+    }
+})
+
+const configMocks = vi.hoisted(() => ({
+    getConfig: vi.fn(),
+    updateConfig: vi.fn(),
+}))
+
+vi.mock('../lib/config.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../lib/config.js')>()
+    return {
+        ...actual,
+        getConfigPath: () => '/home/user/.config/outline-cli/config.json',
+        getConfig: configMocks.getConfig,
+        updateConfig: configMocks.updateConfig,
+    }
+})
+
+const TOKEN_ENV_VAR = 'OUTLINE_API_TOKEN'
+
+/** Reset the module-level migration memo for each test by re-importing. */
+async function loadCreateOutlineTokenStore(): Promise<
+    typeof import('../lib/auth-provider.js').createOutlineTokenStore
+> {
     vi.resetModules()
-    vi.clearAllMocks()
-})
+    const mod = await import('../lib/auth-provider.js')
+    return mod.createOutlineTokenStore
+}
 
-afterEach(() => {
-    if (existsSync(TEST_XDG)) rmSync(TEST_XDG, { recursive: true })
-    delete process.env.XDG_CONFIG_HOME
-})
+describe('createOutlineAuthProvider', () => {
+    beforeEach(() => {
+        delete process.env.OUTLINE_URL
+        delete process.env.OUTLINE_OAUTH_CLIENT_ID
+        configMocks.getConfig.mockReset().mockResolvedValue({})
+        configMocks.updateConfig.mockReset().mockResolvedValue(undefined)
+    })
 
-describe('OutlineAuthProvider', () => {
     it('authorize builds an outline /oauth/authorize URL with PKCE params from flags', async () => {
         const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
         const result = await createOutlineAuthProvider().authorize({
@@ -58,10 +104,7 @@ describe('OutlineAuthProvider', () => {
 
     it('exchangeCode posts via fetchWithRetry and surfaces provider errors', async () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
-        vi.mocked(fetchWithRetry).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ access_token: 'tok-abc' }),
-        } as Response)
+        vi.mocked(fetchWithRetry).mockResolvedValueOnce(okResponse({ access_token: 'tok-abc' }))
 
         const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
         const provider = createOutlineAuthProvider()
@@ -135,151 +178,279 @@ describe('OutlineAuthProvider', () => {
     })
 })
 
-describe('OutlineTokenStore', () => {
-    const sampleAccount = {
-        id: 'user-uuid',
-        label: 'Ada',
-        baseUrl: 'https://wiki.example.com',
-        oauthClientId: 'cid-xyz',
-        teamName: 'Analytics',
-    }
+describe('createOutlineTokenStore', () => {
+    beforeEach(() => {
+        delete process.env[TOKEN_ENV_VAR]
+        delete process.env.OUTLINE_URL
+        keyringMocks.createKeyringTokenStore.mockClear()
+        keyringMocks.inner.active.mockReset().mockResolvedValue(null)
+        keyringMocks.inner.set.mockReset().mockResolvedValue(undefined)
+        keyringMocks.inner.clear.mockReset().mockResolvedValue(undefined)
+        keyringMocks.inner.list.mockReset().mockResolvedValue([])
+        keyringMocks.inner.setDefault.mockReset().mockResolvedValue(undefined)
+        migrateMocks.runMigrateLegacyAuth
+            .mockReset()
+            .mockResolvedValue({ status: 'no-legacy-state' })
+        configMocks.getConfig.mockReset().mockResolvedValue({})
+        configMocks.updateConfig.mockReset().mockResolvedValue(undefined)
+    })
 
-    /** Config-file shape that round-trips to `sampleAccount`. */
-    const sampleConfig = {
-        api_token: 'tok',
-        base_url: sampleAccount.baseUrl,
-        oauth_client_id: sampleAccount.oauthClientId,
-        auth_user_id: sampleAccount.id,
-        auth_user_name: sampleAccount.label,
-        auth_team_name: sampleAccount.teamName,
-    }
+    afterEach(() => {
+        vi.unstubAllEnvs()
+    })
 
-    it('round-trips token + account through the config file', async () => {
-        const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
+    it('passes outline-cli wiring to cli-core: serviceName, records location, and the id-or-label matcher', async () => {
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+        createOutlineTokenStore()
+
+        const options = keyringMocks.createKeyringTokenStore.mock.calls[0][0]
+        expect(options.serviceName).toBe('outline-cli')
+        expect(options.recordsLocation).toBe('/home/user/.config/outline-cli/config.json')
+        const { matchOutlineAccount } = await import('../lib/auth-provider.js')
+        expect(options.matchAccount).toBe(matchOutlineAccount)
+    })
+
+    it('active() env-token short-circuit: returns env token, honours OUTLINE_URL, bypasses migration + inner.active', async () => {
+        vi.stubEnv(TOKEN_ENV_VAR, 'env_token_value')
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const defaultBase = await createOutlineTokenStore().active()
+        expect(defaultBase?.token).toBe('env_token_value')
+        expect(defaultBase?.account.id).toBe('')
+        expect(defaultBase?.account.baseUrl).toBe('https://app.getoutline.com')
+        expect(keyringMocks.inner.active).not.toHaveBeenCalled()
+        expect(migrateMocks.runMigrateLegacyAuth).not.toHaveBeenCalled()
+
+        vi.stubEnv('OUTLINE_URL', 'https://custom.example.com/')
+        const customBase = await createOutlineTokenStore().active()
+        expect(customBase?.account.baseUrl).toBe('https://custom.example.com')
+    })
+
+    it('active() ignores OUTLINE_API_TOKEN when an explicit ref targets a stored account', async () => {
+        vi.stubEnv(TOKEN_ENV_VAR, 'env_token_value')
+        keyringMocks.inner.active.mockResolvedValue({
+            token: 'tk_stored',
+            account: STORED_ACCOUNT,
+        })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await createOutlineTokenStore().active('user-uuid')
+
+        expect(keyringMocks.inner.active).toHaveBeenCalledWith('user-uuid')
+    })
+
+    it('runs runMigrateLegacyAuth on the first store access and memoises across subsequent calls', async () => {
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
         const store = createOutlineTokenStore()
-        await store.set(sampleAccount, 'tok-persisted')
-        const got = await store.active()
-        expect(got).toEqual({ token: 'tok-persisted', account: sampleAccount })
+
+        await store.active('user-uuid')
+        await store.list()
+        await store.clear('user-uuid')
+        await store.set(STORED_ACCOUNT, 'tk')
+        await store.setDefault('user-uuid')
+
+        expect(migrateMocks.runMigrateLegacyAuth).toHaveBeenCalledTimes(1)
+        expect(migrateMocks.runMigrateLegacyAuth).toHaveBeenCalledWith({ silent: true })
     })
 
-    it('active returns null when the saved token predates the persisted-identity fields', async () => {
-        writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ api_token: 'legacy-tok' }))
-        const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-        await expect(createOutlineTokenStore().active()).resolves.toBeNull()
+    it('falls back to the legacy plaintext snapshot only when the v2 store is empty', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG)
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const snapshot = await createOutlineTokenStore().active()
+
+        expect(snapshot).toEqual({
+            token: LEGACY_CONFIG.api_token,
+            account: STORED_ACCOUNT,
+        })
+        // v2 consulted first (returned null per the beforeEach default),
+        // then the legacy snapshot served the answer.
+        expect(keyringMocks.inner.active).toHaveBeenCalledTimes(1)
     })
 
-    it('clear strips every auth field but preserves unrelated config keys', async () => {
-        writeFileSync(
-            TEST_CONFIG_PATH,
-            JSON.stringify({
-                api_token: 'tok',
-                base_url: 'https://x',
-                oauth_client_id: 'c',
-                auth_user_id: 'u',
-                auth_user_name: 'l',
-                auth_team_name: 't',
-                update_channel: 'pre-release',
-            }),
+    it('delegates to the v2 store when migration is conclusive (no-legacy-state) — no legacy read attempt', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue({ status: 'no-legacy-state' })
+        keyringMocks.inner.active.mockResolvedValue({ token: 'tk_v2', account: STORED_ACCOUNT })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const snapshot = await createOutlineTokenStore().active()
+
+        expect(snapshot).toEqual({ token: 'tk_v2', account: STORED_ACCOUNT })
+        expect(configMocks.getConfig).not.toHaveBeenCalled()
+    })
+
+    it('falls back to legacy when runMigrateLegacyAuth rejects (catch branch of ensureMigrated)', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockRejectedValue(new Error('boom'))
+        configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG)
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const snapshot = await createOutlineTokenStore().active()
+
+        expect(snapshot?.token).toBe(LEGACY_CONFIG.api_token)
+        expect(snapshot?.account.id).toBe('user-uuid')
+    })
+
+    it('legacy snapshot synthesises empty id/label when the v1 config never carried persisted identity fields', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.getConfig.mockResolvedValue({ api_token: 'tk_old' })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const snapshot = await createOutlineTokenStore().active()
+
+        expect(snapshot?.token).toBe('tk_old')
+        expect(snapshot?.account.id).toBe('')
+        expect(snapshot?.account.label).toBe('')
+        expect(snapshot?.account.baseUrl).toBe('https://app.getoutline.com')
+    })
+
+    it('active(ref) returns the legacy snapshot when ref matches, falls through to v2 when it does not', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG)
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+        const store = createOutlineTokenStore()
+
+        const matched = await store.active('user-uuid')
+        expect(matched?.token).toBe(LEGACY_CONFIG.api_token)
+
+        const mismatched = await store.active('other-user')
+        expect(mismatched).toBeNull()
+        expect(keyringMocks.inner.active).toHaveBeenCalledWith('other-user')
+    })
+
+    it('set() / clear() discharge legacy state on disk when migration is inconclusive', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+        const store = createOutlineTokenStore()
+
+        await store.set(STORED_ACCOUNT, 'tk_new')
+        await store.clear('user-uuid')
+
+        expect(configMocks.updateConfig).toHaveBeenCalledWith(LEGACY_CLEAR_PAYLOAD)
+        expect(keyringMocks.inner.set).toHaveBeenCalledWith(STORED_ACCOUNT, 'tk_new')
+        expect(keyringMocks.inner.clear).toHaveBeenCalledWith('user-uuid')
+    })
+
+    it('set() / clear() do NOT touch legacy state when migration is conclusive', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue({ status: 'no-legacy-state' })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+        const store = createOutlineTokenStore()
+
+        await store.set(STORED_ACCOUNT, 'tk_new')
+        await store.clear('user-uuid')
+
+        expect(configMocks.updateConfig).not.toHaveBeenCalled()
+    })
+
+    it('set() does NOT discharge legacy state when the v2 write fails (atomicity)', async () => {
+        // Regression test for the pre-fix order where legacy fields were
+        // erased before the v2 write — a failing keyring call would leave
+        // the user with no recoverable credentials.
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        keyringMocks.inner.set.mockRejectedValue(new Error('keyring boom'))
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await expect(createOutlineTokenStore().set(STORED_ACCOUNT, 'tk_new')).rejects.toThrow(
+            'keyring boom',
         )
-        const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-        await createOutlineTokenStore().clear()
-        const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
-        expect(after).toEqual({ update_channel: 'pre-release' })
+        expect(configMocks.updateConfig).not.toHaveBeenCalled()
     })
 
-    describe('ref-aware lookups', () => {
-        it('active(ref) returns the snapshot when the id ref matches', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            expect(await createOutlineTokenStore().active(sampleAccount.id)).toEqual({
-                token: sampleConfig.api_token,
-                account: sampleAccount,
-            })
-        })
+    it('clear() does NOT discharge legacy state when the v2 clear fails (atomicity)', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        keyringMocks.inner.clear.mockRejectedValue(new Error('keyring boom'))
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
 
-        it('active(ref) matches the stored label case-insensitively', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            expect(await createOutlineTokenStore().active('ADA')).toEqual({
-                token: sampleConfig.api_token,
-                account: sampleAccount,
-            })
-        })
+        await expect(createOutlineTokenStore().clear('user-uuid')).rejects.toThrow('keyring boom')
+        expect(configMocks.updateConfig).not.toHaveBeenCalled()
+    })
 
-        it('active(ref) throws ACCOUNT_NOT_FOUND on mismatch', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await expect(createOutlineTokenStore().active('other')).rejects.toMatchObject({
-                code: 'ACCOUNT_NOT_FOUND',
-            })
-        })
+    it('clear() PROPAGATES updateConfig failures (logout must be atomic, not silently partial)', async () => {
+        // If the v2 clear succeeded but the legacy discharge silently
+        // failed, the next `active()` call would fall back to the
+        // surviving plaintext `api_token` — i.e. "logout" leaves the
+        // user authenticated. Logout has to fail loudly instead.
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.updateConfig.mockRejectedValue(new Error('disk full'))
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
 
-        it('active(ref) throws ACCOUNT_NOT_FOUND when no token is stored', async () => {
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await expect(createOutlineTokenStore().active(sampleAccount.id)).rejects.toMatchObject({
-                code: 'ACCOUNT_NOT_FOUND',
-            })
-        })
+        await expect(createOutlineTokenStore().clear('user-uuid')).rejects.toThrow('disk full')
+        expect(keyringMocks.inner.clear).toHaveBeenCalledWith('user-uuid')
+    })
 
-        it('clear(ref) clears the config when the ref matches', async () => {
-            writeFileSync(
-                TEST_CONFIG_PATH,
-                JSON.stringify({ ...sampleConfig, update_channel: 'stable' }),
-            )
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await createOutlineTokenStore().clear(sampleAccount.id)
-            const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
-            expect(after).toEqual({ update_channel: 'stable' })
+    it('set() runs migration BEFORE the v2 write (no post-write race that re-grabs the legacy token)', async () => {
+        // Regression test for the race where ensureMigrated only fired
+        // after inner.set/clear: migration would then see the stale
+        // api_token still on disk and migrate it on top of the fresh
+        // login, either duplicating accounts or reviving auth after logout.
+        const callOrder: string[] = []
+        migrateMocks.runMigrateLegacyAuth.mockImplementation(async () => {
+            callOrder.push('migrate')
+            return { status: 'no-legacy-state' }
         })
+        keyringMocks.inner.set.mockImplementation(async () => {
+            callOrder.push('set')
+        })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
 
-        it('clear(ref) throws ACCOUNT_NOT_FOUND on mismatch and does not touch storage', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await expect(createOutlineTokenStore().clear('other')).rejects.toMatchObject({
-                code: 'ACCOUNT_NOT_FOUND',
-            })
-            const after = JSON.parse(readFileSync(TEST_CONFIG_PATH, 'utf8'))
-            expect(after).toEqual(sampleConfig)
-        })
+        await createOutlineTokenStore().set(STORED_ACCOUNT, 'tk_new')
 
-        it('clear(ref) throws ACCOUNT_NOT_FOUND when no token is stored at all', async () => {
-            // Guards against a regression to the old silent no-op when the
-            // store is empty — `attachLogoutCommand` would otherwise emit
-            // ✓ Logged out for a ref that never had any backing account.
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await expect(createOutlineTokenStore().clear(sampleAccount.id)).rejects.toMatchObject({
-                code: 'ACCOUNT_NOT_FOUND',
-            })
-            expect(existsSync(TEST_CONFIG_PATH)).toBe(false)
-        })
+        expect(callOrder).toEqual(['migrate', 'set'])
+    })
+})
 
-        it('list() returns the stored account flagged as default', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            expect(await createOutlineTokenStore().list()).toEqual([
-                { account: sampleAccount, isDefault: true },
-            ])
-        })
+describe('matchOutlineAccount', () => {
+    it('matches the UUID exactly and the label case-insensitively', async () => {
+        const { matchOutlineAccount } = await import('../lib/auth-provider.js')
+        expect(matchOutlineAccount(STORED_ACCOUNT, 'user-uuid')).toBe(true)
+        expect(matchOutlineAccount(STORED_ACCOUNT, 'ADA')).toBe(true)
+        expect(matchOutlineAccount(STORED_ACCOUNT, 'ada')).toBe(true)
+        expect(matchOutlineAccount(STORED_ACCOUNT, 'other-user')).toBe(false)
+        // Case-sensitive on the UUID — would never collide with a label.
+        expect(matchOutlineAccount(STORED_ACCOUNT, 'USER-UUID')).toBe(false)
+    })
+})
 
-        it('list() returns an empty array when no token is stored', async () => {
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            expect(await createOutlineTokenStore().list()).toEqual([])
-        })
+describe('getActiveTokenSource', () => {
+    beforeEach(() => {
+        delete process.env[TOKEN_ENV_VAR]
+        configMocks.getConfig.mockReset()
+    })
 
-        it('setDefault(ref) resolves silently when the ref matches', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await expect(
-                createOutlineTokenStore().setDefault(sampleAccount.id),
-            ).resolves.toBeUndefined()
-        })
+    afterEach(() => {
+        vi.unstubAllEnvs()
+    })
 
-        it('setDefault(ref) throws ACCOUNT_NOT_FOUND when the ref does not match', async () => {
-            writeFileSync(TEST_CONFIG_PATH, JSON.stringify(sampleConfig))
-            const { createOutlineTokenStore } = await import('../lib/auth-provider.js')
-            await expect(createOutlineTokenStore().setDefault('other')).rejects.toMatchObject({
-                code: 'ACCOUNT_NOT_FOUND',
-            })
+    it('reports the storage location of the active token, mirroring active()s resolution order', async () => {
+        const { getActiveTokenSource } = await import('../lib/auth-provider.js')
+
+        vi.stubEnv(TOKEN_ENV_VAR, 'tk')
+        configMocks.getConfig.mockResolvedValue({})
+        await expect(getActiveTokenSource()).resolves.toBe('env')
+        vi.unstubAllEnvs()
+
+        configMocks.getConfig.mockResolvedValue({
+            users: [{ id: 'u', name: 'Ada', token: 'plaintext' }],
         })
+        await expect(getActiveTokenSource()).resolves.toBe('config-file')
+
+        configMocks.getConfig.mockResolvedValue({ users: [{ id: 'u', name: 'Ada' }] })
+        await expect(getActiveTokenSource()).resolves.toBe('secure-store')
+
+        // v2 record (even without fallbackToken) wins over a lingering v1
+        // plaintext slot — `active()` ignores `api_token` once a record
+        // exists, so this classifier must too. Regression guard for the
+        // pre-fix order where the v1 check ran first.
+        configMocks.getConfig.mockResolvedValue({
+            api_token: 'stale-v1',
+            users: [{ id: 'u', name: 'Ada' }],
+        })
+        await expect(getActiveTokenSource()).resolves.toBe('secure-store')
+
+        configMocks.getConfig.mockResolvedValue({ api_token: 'tk' })
+        await expect(getActiveTokenSource()).resolves.toBe('config-file')
+
+        configMocks.getConfig.mockResolvedValue({})
+        await expect(getActiveTokenSource()).resolves.toBe('secure-store')
     })
 })

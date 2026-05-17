@@ -1,4 +1,9 @@
-import { attachLoginCommand, attachLogoutCommand, attachStatusCommand } from '@doist/cli-core/auth'
+import {
+    attachLoginCommand,
+    attachLogoutCommand,
+    attachStatusCommand,
+    type TokenStorageResult,
+} from '@doist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'
@@ -7,7 +12,9 @@ import {
     type AuthInfoResponse,
     createOutlineAuthProvider,
     createOutlineTokenStore,
+    getActiveTokenSource,
     type OutlineAccount,
+    type OutlineTokenStore,
 } from '../lib/auth-provider.js'
 import { CliError } from '../lib/errors.js'
 
@@ -15,7 +22,7 @@ const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 
 type StatusData = {
     email: string
-    source: 'env' | 'config'
+    source: 'env' | 'secure-store' | 'config-file'
 }
 
 function resolvePreferredCallbackPort(): number {
@@ -28,11 +35,34 @@ function resolvePreferredCallbackPort(): number {
     return parsed
 }
 
+/**
+ * Surface a `TokenStorageResult` from a save/clear: the human-readable
+ * confirmation goes to stdout, any keyring-fallback warning goes to stderr.
+ * Pass `isMachineOutput: true` to suppress the stdout confirmation in
+ * `--json` / `--ndjson` mode while still routing the warning to stderr.
+ *
+ * Exported for direct unit testing — the alternative (driving this via
+ * mocked cli-core login/logout hooks) would require stubbing the entire
+ * store contract just to assert two console calls.
+ */
+export function logTokenStorageResult(
+    result: TokenStorageResult,
+    secureStoreMessage: string,
+    isMachineOutput = false,
+): void {
+    if (!isMachineOutput && result.storage === 'secure-store') {
+        console.log(chalk.dim(secureStoreMessage))
+    }
+    if (result.warning) {
+        console.error(chalk.yellow('Warning:'), result.warning)
+    }
+}
+
 export function registerAuthCommand(program: Command): void {
     const auth = program.command('auth').description('Manage authentication')
 
     const provider = createOutlineAuthProvider()
-    const store = createOutlineTokenStore()
+    const store: OutlineTokenStore = createOutlineTokenStore()
 
     attachLoginCommand(auth, {
         provider,
@@ -42,8 +72,18 @@ export function registerAuthCommand(program: Command): void {
         renderSuccess,
         renderError,
         onSuccess({ view, account }) {
-            if (view.json || view.ndjson) return
-            console.log(chalk.green(`Authenticated to ${account.teamName} as ${account.label}`))
+            const isMachineOutput = view.json || view.ndjson
+            if (!isMachineOutput) {
+                console.log(chalk.green(`Authenticated to ${account.teamName} as ${account.label}`))
+            }
+            const result = store.getLastStorageResult()
+            if (result) {
+                logTokenStorageResult(
+                    result,
+                    'Token stored securely in the system credential manager',
+                    isMachineOutput,
+                )
+            }
         },
     })
         .description('Authenticate with an Outline instance via OAuth')
@@ -66,15 +106,15 @@ export function registerAuthCommand(program: Command): void {
         description: 'Show current authentication state',
         async fetchLive({ token, account }) {
             try {
-                const { data: info } = await apiRequest<AuthInfoResponse>(
-                    'auth.info',
-                    {},
-                    { token, baseUrl: account.baseUrl },
-                )
-                statusData = {
-                    email: info.user.email,
-                    source: process.env.OUTLINE_API_TOKEN ? 'env' : 'config',
-                }
+                const [{ data: info }, source] = await Promise.all([
+                    apiRequest<AuthInfoResponse>(
+                        'auth.info',
+                        {},
+                        { token, baseUrl: account.baseUrl },
+                    ),
+                    getActiveTokenSource(),
+                ])
+                statusData = { email: info.user.email, source }
                 return {
                     ...account,
                     id: info.user.id,
@@ -118,5 +158,14 @@ export function registerAuthCommand(program: Command): void {
     attachLogoutCommand<OutlineAccount>(auth, {
         store,
         description: 'Clear saved authentication',
+        onCleared({ view }) {
+            const result = store.getLastClearResult()
+            if (!result) return
+            logTokenStorageResult(
+                result,
+                'Stored token removed from the system credential manager',
+                view.json || view.ndjson,
+            )
+        },
     })
 }
