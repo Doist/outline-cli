@@ -1,12 +1,13 @@
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AUTH_INFO } from './_fixtures/auth.js'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
     getBaseUrl: async () => 'https://test.outline.com',
     getOAuthClientId: async () => undefined,
-    getTokenSource: async () => 'config' as const,
-    clearConfig: vi.fn(),
+    getActiveTokenSource: async () =>
+        process.env.OUTLINE_API_TOKEN ? ('env' as const) : ('secure-store' as const),
 }))
 
 vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
@@ -26,6 +27,19 @@ vi.mock('@doist/cli-core/auth', async () => ({
     ...(await vi.importActual<typeof import('@doist/cli-core/auth')>('@doist/cli-core/auth')),
     attachLoginCommand: vi.fn(),
 }))
+
+/**
+ * Replace `console.log` with a recorder. Tests read `logs` to assert on
+ * stdout-bound output. Lines are joined with spaces, matching how chalk's
+ * styled fragments arrive at the spy.
+ */
+function captureLogs(): { logs: string[] } {
+    const logs: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+        logs.push(args.join(' '))
+    })
+    return { logs }
+}
 
 async function captureAttachOptions() {
     const { attachLoginCommand } = await import('@doist/cli-core/auth')
@@ -59,10 +73,7 @@ afterEach(() => {
 describe('registerAuthCommand', () => {
     it('wires --base-url / --client-id, env-driven port, and prints success only in human output mode', async () => {
         process.env.OUTLINE_OAUTH_CALLBACK_PORT = '7000'
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        const { logs } = captureLogs()
 
         const { options, login } = await captureAttachOptions()
 
@@ -93,11 +104,6 @@ describe('registerAuthCommand', () => {
 })
 
 describe('auth status subcommand', () => {
-    const AUTH_INFO = {
-        user: { id: 'user-uuid', name: 'Ada Lovelace', email: 'ada@example.com' },
-        team: { name: 'Analytics', subdomain: 'analytics' },
-    }
-
     async function importApiMock() {
         const { apiRequest } = await import('../lib/api.js')
         return vi.mocked(apiRequest)
@@ -105,10 +111,7 @@ describe('auth status subcommand', () => {
 
     it('renders the human status from the env-token snapshot path', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        const { logs } = captureLogs()
         const apiRequest = await importApiMock()
         apiRequest.mockResolvedValue({ data: AUTH_INFO })
 
@@ -130,10 +133,7 @@ describe('auth status subcommand', () => {
 
     it('emits a PII-free JSON envelope under --json', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        const { logs } = captureLogs()
         const apiRequest = await importApiMock()
         apiRequest.mockResolvedValue({ data: AUTH_INFO })
 
@@ -154,10 +154,7 @@ describe('auth status subcommand', () => {
 
     it('emits a single newline-free NDJSON line under --ndjson', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        const { logs } = captureLogs()
         const apiRequest = await importApiMock()
         apiRequest.mockResolvedValue({ data: AUTH_INFO })
 
@@ -194,42 +191,22 @@ describe('auth status subcommand', () => {
 })
 
 describe('auth logout subcommand', () => {
-    it('clears the token and prints the registrar success line', async () => {
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
-        const { clearConfig } = await import('../lib/auth.js')
+    it('prints the registrar success line in human mode', async () => {
+        const { logs } = captureLogs()
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'logout'])
 
-        expect(clearConfig).toHaveBeenCalledTimes(1)
         expect(logs).toContain('✓ Logged out')
     })
 
     it('emits {"ok": true} under --json and skips the human success line', async () => {
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        const { logs } = captureLogs()
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'logout', '--json'])
 
         expect(logs).toHaveLength(1)
         expect(JSON.parse(logs[0])).toEqual({ ok: true })
-    })
-
-    it('stays silent on stdout under --ndjson', async () => {
-        const logs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
-
-        const program = await buildProgram()
-        await program.parseAsync(['node', 'ol', 'auth', 'logout', '--ndjson'])
-
-        expect(logs).toEqual([])
     })
 })

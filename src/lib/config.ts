@@ -8,7 +8,29 @@ import {
 
 const APP_NAME = 'outline-cli'
 
+/**
+ * One row of the `users[]` array. `id` is the Outline user UUID. `token` is
+ * a plaintext fallback persisted only when the OS keyring is unavailable at
+ * write time (WSL, headless Linux, missing native binary).
+ */
+export type StoredUser = {
+    id: string
+    name: string
+    base_url?: string
+    oauth_client_id?: string
+    team_name?: string
+    token?: string
+}
+
 export type Config = CoreConfig & {
+    config_version?: number
+    users?: StoredUser[]
+    default_user_id?: string
+
+    /**
+     * Legacy v1 single-user fields. Read by the migration helper; removed
+     * from disk by `cleanupLegacyConfig` after the v2 record write succeeds.
+     */
     api_token?: string
     base_url?: string
     oauth_client_id?: string

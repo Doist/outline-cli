@@ -3,9 +3,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}`)
+const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}-auth`)
 const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
 const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, 'config.json')
+
+// Force `identifyAccount` to fail so migration returns `skipped` and the
+// runtime falls back to the legacy plaintext snapshot — the v1 token in
+// these fixtures has no live API behind it. cli-core's secure-store is left
+// real because the env-token tests don't hit the keyring at all.
+vi.mock('../transport/fetch-with-retry.js', () => ({
+    fetchWithRetry: vi.fn(async () => {
+        throw new Error('offline (mocked)')
+    }),
+}))
 
 describe('auth', () => {
     beforeEach(() => {
@@ -30,7 +40,7 @@ describe('auth', () => {
         await expect(getApiToken()).resolves.toBe('env-token')
     })
 
-    it('getApiToken reads from config file', async () => {
+    it('getApiToken falls back to the legacy plaintext config token', async () => {
         writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ api_token: 'file-token' }))
         const { getApiToken } = await import('../lib/auth.js')
         await expect(getApiToken()).resolves.toBe('file-token')
@@ -58,18 +68,29 @@ describe('auth', () => {
         await expect(getBaseUrl()).resolves.toBe('https://app.getoutline.com')
     })
 
-    it('clearConfig removes the saved token', async () => {
+    it('getBaseUrl reads from the default user record (v2)', async () => {
         writeFileSync(
             TEST_CONFIG_PATH,
             JSON.stringify({
-                api_token: 'test-token',
-                base_url: 'https://wiki.test.com',
-                oauth_client_id: 'client-id',
+                config_version: 2,
+                users: [
+                    {
+                        id: 'u',
+                        name: 'Ada',
+                        base_url: 'https://wiki.example.com',
+                        token: 'tok',
+                    },
+                ],
             }),
         )
-        const { clearConfig, getApiToken } = await import('../lib/auth.js')
-        await clearConfig()
-        await expect(getApiToken()).rejects.toThrow()
+        const { getBaseUrl } = await import('../lib/auth.js')
+        await expect(getBaseUrl()).resolves.toBe('https://wiki.example.com')
+    })
+
+    it('getBaseUrl reads from the legacy v1 base_url slot', async () => {
+        writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ base_url: 'https://legacy.example.com' }))
+        const { getBaseUrl } = await import('../lib/auth.js')
+        await expect(getBaseUrl()).resolves.toBe('https://legacy.example.com')
     })
 
     it('getOAuthClientId returns env var first', async () => {
@@ -78,9 +99,28 @@ describe('auth', () => {
         await expect(getOAuthClientId()).resolves.toBe('env-client-id')
     })
 
-    it('getOAuthClientId reads from config file', async () => {
+    it('getOAuthClientId reads from the legacy v1 config slot', async () => {
         writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ oauth_client_id: 'file-client-id' }))
         const { getOAuthClientId } = await import('../lib/auth.js')
         await expect(getOAuthClientId()).resolves.toBe('file-client-id')
+    })
+
+    it('getOAuthClientId reads from the default user record (v2)', async () => {
+        writeFileSync(
+            TEST_CONFIG_PATH,
+            JSON.stringify({
+                config_version: 2,
+                users: [
+                    {
+                        id: 'u',
+                        name: 'Ada',
+                        oauth_client_id: 'cid-record',
+                        token: 'tok',
+                    },
+                ],
+            }),
+        )
+        const { getOAuthClientId } = await import('../lib/auth.js')
+        await expect(getOAuthClientId()).resolves.toBe('cid-record')
     })
 })
