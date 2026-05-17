@@ -253,7 +253,7 @@ describe('createOutlineTokenStore', () => {
         expect(migrateMocks.runMigrateLegacyAuth).toHaveBeenCalledWith({ silent: true })
     })
 
-    it('falls back to the legacy plaintext snapshot when migration is skipped', async () => {
+    it('falls back to the legacy plaintext snapshot only when the v2 store is empty', async () => {
         migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
         configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG)
         const createOutlineTokenStore = await loadCreateOutlineTokenStore()
@@ -264,7 +264,9 @@ describe('createOutlineTokenStore', () => {
             token: LEGACY_CONFIG.api_token,
             account: STORED_ACCOUNT,
         })
-        expect(keyringMocks.inner.active).not.toHaveBeenCalled()
+        // v2 consulted first (returned null per the beforeEach default),
+        // then the legacy snapshot served the answer.
+        expect(keyringMocks.inner.active).toHaveBeenCalledTimes(1)
     })
 
     it('delegates to the v2 store when migration is conclusive (no-legacy-state) — no legacy read attempt', async () => {
@@ -287,7 +289,6 @@ describe('createOutlineTokenStore', () => {
 
         expect(snapshot?.token).toBe(LEGACY_CONFIG.api_token)
         expect(snapshot?.account.id).toBe('user-uuid')
-        expect(keyringMocks.inner.active).not.toHaveBeenCalled()
     })
 
     it('legacy snapshot synthesises empty id/label when the v1 config never carried persisted identity fields', async () => {
@@ -340,6 +341,20 @@ describe('createOutlineTokenStore', () => {
 
         expect(configMocks.updateConfig).not.toHaveBeenCalled()
     })
+
+    it('set() does NOT discharge legacy state when the v2 write fails (atomicity)', async () => {
+        // Regression test for the pre-fix order where legacy fields were
+        // erased before the v2 write — a failing keyring call would leave
+        // the user with no recoverable credentials.
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        keyringMocks.inner.set.mockRejectedValue(new Error('keyring boom'))
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await expect(createOutlineTokenStore().set(STORED_ACCOUNT, 'tk_new')).rejects.toThrow(
+            'keyring boom',
+        )
+        expect(configMocks.updateConfig).not.toHaveBeenCalled()
+    })
 })
 
 describe('matchOutlineAccount', () => {
@@ -364,16 +379,13 @@ describe('getActiveTokenSource', () => {
         vi.unstubAllEnvs()
     })
 
-    it('reports the storage location of the active token across env / v1 plaintext / v2 record / empty', async () => {
+    it('reports the storage location of the active token, mirroring active()s resolution order', async () => {
         const { getActiveTokenSource } = await import('../lib/auth-provider.js')
 
         vi.stubEnv(TOKEN_ENV_VAR, 'tk')
         configMocks.getConfig.mockResolvedValue({})
         await expect(getActiveTokenSource()).resolves.toBe('env')
         vi.unstubAllEnvs()
-
-        configMocks.getConfig.mockResolvedValue({ api_token: 'tk' })
-        await expect(getActiveTokenSource()).resolves.toBe('config-file')
 
         configMocks.getConfig.mockResolvedValue({
             users: [{ id: 'u', name: 'Ada', token: 'plaintext' }],
@@ -382,6 +394,19 @@ describe('getActiveTokenSource', () => {
 
         configMocks.getConfig.mockResolvedValue({ users: [{ id: 'u', name: 'Ada' }] })
         await expect(getActiveTokenSource()).resolves.toBe('secure-store')
+
+        // v2 record (even without fallbackToken) wins over a lingering v1
+        // plaintext slot — `active()` ignores `api_token` once a record
+        // exists, so this classifier must too. Regression guard for the
+        // pre-fix order where the v1 check ran first.
+        configMocks.getConfig.mockResolvedValue({
+            api_token: 'stale-v1',
+            users: [{ id: 'u', name: 'Ada' }],
+        })
+        await expect(getActiveTokenSource()).resolves.toBe('secure-store')
+
+        configMocks.getConfig.mockResolvedValue({ api_token: 'tk' })
+        await expect(getActiveTokenSource()).resolves.toBe('config-file')
 
         configMocks.getConfig.mockResolvedValue({})
         await expect(getActiveTokenSource()).resolves.toBe('secure-store')

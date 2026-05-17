@@ -10,7 +10,7 @@ import {
 } from '@doist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
-import { SECURE_STORE_SERVICE } from './auth-constants.js'
+import { LEGACY_CLEAR_PAYLOAD, SECURE_STORE_SERVICE, TOKEN_ENV_VAR } from './auth-constants.js'
 import { getBaseUrl, getOAuthClientId } from './auth.js'
 import { getConfig, getConfigPath, updateConfig } from './config.js'
 import { runMigrateLegacyAuth } from './migrate-auth.js'
@@ -18,8 +18,6 @@ import { makeOutlineAccount, type OutlineAccount } from './outline-account.js'
 import { createOutlineUserRecordStore, getDefaultUserRecord } from './user-records.js'
 
 export type { OutlineAccount } from './outline-account.js'
-
-const TOKEN_ENV_VAR = 'OUTLINE_API_TOKEN'
 
 export type AuthInfoResponse = {
     user: { id: string; name: string; email: string }
@@ -209,20 +207,17 @@ async function readLegacyTokenSnapshot(): Promise<{
 }
 
 /**
- * Best-effort discharge of v1 plaintext state. Runs before a write/clear
- * when migration is inconclusive so v2 writes aren't shadowed by a stale
- * legacy token. Failures are swallowed — the marker is what gates
- * re-migration, not the absence of these fields.
+ * Discharge v1 plaintext state. Runs **after** a successful write/clear
+ * (never before) so a v2-op failure doesn't strand the user with no
+ * recoverable credentials, and we can prefer the v2 store on the next
+ * read regardless of whether this best-effort cleanup ran.
+ *
+ * Failures are swallowed because `active()` now reads the v2 store first
+ * and only falls back to the legacy snapshot when the v2 store is empty —
+ * a lingering `api_token` field can no longer shadow a fresh v2 write.
  */
 async function dischargeLegacyState(): Promise<void> {
-    await updateConfig({
-        api_token: undefined,
-        base_url: undefined,
-        oauth_client_id: undefined,
-        auth_user_id: undefined,
-        auth_user_name: undefined,
-        auth_team_name: undefined,
-    }).catch(() => undefined)
+    await updateConfig(LEGACY_CLEAR_PAYLOAD).catch(() => undefined)
 }
 
 /**
@@ -261,11 +256,15 @@ export async function isLegacyAuthActive(): Promise<boolean> {
  * account.
  *
  * `ensureMigrated()` runs on every stored-state op so the lazy migration
- * fires on first command. When migration isn't conclusive:
- *  - `active()` falls back to the legacy snapshot, honouring `ref` so it
- *    can't resolve to a different account than the caller asked for.
- *  - `set()` / `clear()` discharge legacy state on disk first so v2 writes
- *    aren't shadowed by a stale v1 token on the next read.
+ * fires on first command. `active()` always prefers the v2 store and only
+ * falls back to the legacy snapshot when the v2 store is empty *and*
+ * migration is inconclusive — that ordering means a stale v1 token can
+ * never shadow a successful v2 write, even if the best-effort legacy
+ * cleanup has not yet run.
+ *
+ * `set()` / `clear()` discharge legacy state **after** the v2 op succeeds
+ * (not before) so a failure in the v2 op doesn't strand the user with no
+ * recoverable credentials.
  */
 export function createOutlineTokenStore(): OutlineTokenStore {
     const inner = createKeyringTokenStore<OutlineAccount>({
@@ -280,7 +279,7 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             await dischargeLegacyState()
         }
     }
-    return Object.assign(Object.create(inner) as OutlineTokenStore, {
+    return {
         async active(ref?: AccountRef) {
             if (ref === undefined) {
                 const envToken = process.env[TOKEN_ENV_VAR]?.trim()
@@ -295,22 +294,27 @@ export function createOutlineTokenStore(): OutlineTokenStore {
                     }
                 }
             }
-            const result = await ensureMigrated()
-            if (result === null || !migrationIsConclusive(result)) {
-                const legacy = await readLegacyTokenSnapshot()
-                if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
-                    return legacy
-                }
+            await ensureMigrated()
+            const fromStore = await inner.active(ref)
+            if (fromStore) return fromStore
+
+            // v2 store empty — try the legacy snapshot. We don't gate this
+            // on migration status: even on conclusive results the snapshot
+            // is just `null` (cleanupLegacyConfig already ran), so the
+            // extra read is cheap and the branch is the same.
+            const legacy = await readLegacyTokenSnapshot()
+            if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
+                return legacy
             }
-            return inner.active(ref)
+            return null
         },
         async set(account: OutlineAccount, token: string) {
+            await inner.set(account, token)
             await maybeDischargeLegacy()
-            return inner.set(account, token)
         },
         async clear(ref?: AccountRef) {
+            await inner.clear(ref)
             await maybeDischargeLegacy()
-            return inner.clear(ref)
         },
         async list() {
             await ensureMigrated()
@@ -320,20 +324,30 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             await ensureMigrated()
             return inner.setDefault(ref)
         },
-    })
+        getLastStorageResult: () => inner.getLastStorageResult(),
+        getLastClearResult: () => inner.getLastClearResult(),
+    }
 }
 
 /**
- * Where the currently-active token lives. Returns `'config-file'` whenever
- * a plaintext token is on disk — the v2 `fallbackToken` field or the v1
- * `api_token` slot — so diagnostics report the security-relevant state
- * accurately.
+ * Where the currently-active token lives. Mirrors the resolution order in
+ * `active()` so the answer can never contradict the token the runtime is
+ * actually using:
+ *
+ *   1. env var → `'env'`
+ *   2. v2 user record present → `fallbackToken` ? `'config-file'` : `'secure-store'`
+ *   3. v1 plaintext `api_token` slot → `'config-file'` (legacy snapshot)
+ *   4. nothing on disk → `'secure-store'` (neutral default for fresh CLI)
+ *
+ * Critically the v2 record check runs **before** the v1 slot check — if a
+ * stale `api_token` survives a best-effort `cleanupLegacyConfig` failure,
+ * `active()` ignores it (v2 record wins), and so do we.
  */
 export async function getActiveTokenSource(): Promise<'env' | 'secure-store' | 'config-file'> {
     if (process.env[TOKEN_ENV_VAR]?.trim()) return 'env'
     const config = await getConfig()
-    if (config.api_token?.trim()) return 'config-file'
     const record = getDefaultUserRecord(config)
-    if (!record) return 'secure-store'
-    return record.fallbackToken ? 'config-file' : 'secure-store'
+    if (record) return record.fallbackToken ? 'config-file' : 'secure-store'
+    if (config.api_token?.trim()) return 'config-file'
+    return 'secure-store'
 }

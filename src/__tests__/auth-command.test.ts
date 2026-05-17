@@ -209,4 +209,18 @@ describe('auth logout subcommand', () => {
         expect(logs).toHaveLength(1)
         expect(JSON.parse(logs[0])).toEqual({ ok: true })
     })
+
+    it('stays silent on stdout under --ndjson (no human storage-result line leaks)', async () => {
+        // Critical: logout now surfaces a storage-result confirmation via
+        // `logTokenStorageResult` on success. NDJSON consumers expect a
+        // clean stdout — any human-readable line here would corrupt the
+        // stream. Guards the `isMachineOutput` branch in
+        // `logTokenStorageResult`.
+        const { logs } = captureLogs()
+
+        const program = await buildProgram()
+        await program.parseAsync(['node', 'ol', 'auth', 'logout', '--ndjson'])
+
+        expect(logs).toEqual([])
+    })
 })

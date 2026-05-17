@@ -1,8 +1,12 @@
 import { type MigrateAuthResult, migrateLegacyAuth } from '@doist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
-import { LEGACY_KEYRING_ACCOUNT, SECURE_STORE_SERVICE } from './auth-constants.js'
+import {
+    LEGACY_CLEAR_PAYLOAD,
+    LEGACY_KEYRING_ACCOUNT,
+    SECURE_STORE_SERVICE,
+} from './auth-constants.js'
 import { getConfig, updateConfig } from './config.js'
-import { makeOutlineAccount, type OutlineAccount } from './outline-account.js'
+import { DEFAULT_BASE_URL, makeOutlineAccount, type OutlineAccount } from './outline-account.js'
 import { createOutlineUserRecordStore } from './user-records.js'
 
 /**
@@ -12,7 +16,12 @@ import { createOutlineUserRecordStore } from './user-records.js'
  */
 const V2_SCHEMA_VERSION = 2
 
-const DEFAULT_BASE_URL = 'https://app.getoutline.com'
+/**
+ * Cap migration's `auth.info` lookup so a stalled connection can't hang
+ * the CLI indefinitely on first command. cli-core treats the resulting
+ * timeout as `identify-failed`, falling back to the legacy snapshot.
+ */
+const IDENTIFY_TIMEOUT_MS = 10_000
 
 type AuthInfoResponse = {
     data: {
@@ -40,12 +49,13 @@ async function identifyOutlineAccount(token: string): Promise<OutlineAccount> {
                 Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({}),
+            timeout: IDENTIFY_TIMEOUT_MS,
         },
     })
     if (!res.ok) {
         throw new Error(`auth.info failed: ${res.status} ${res.statusText}`)
     }
-    const json = (await res.json()) as AuthInfoResponse
+    const json: AuthInfoResponse = await res.json()
     return makeOutlineAccount({
         id: json.data.user.id,
         label: json.data.user.name,
@@ -81,14 +91,7 @@ export async function runMigrateLegacyAuth(
         },
         identifyAccount: identifyOutlineAccount,
         cleanupLegacyConfig: async () => {
-            await updateConfig({
-                api_token: undefined,
-                base_url: undefined,
-                oauth_client_id: undefined,
-                auth_user_id: undefined,
-                auth_user_name: undefined,
-                auth_team_name: undefined,
-            })
+            await updateConfig(LEGACY_CLEAR_PAYLOAD)
         },
         silent: options.silent,
         logPrefix: 'outline-cli',

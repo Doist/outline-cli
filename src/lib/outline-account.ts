@@ -17,7 +17,7 @@ export type OutlineAccount = AuthAccount & {
     teamName?: string
 }
 
-const DEFAULT_BASE_URL = 'https://app.getoutline.com'
+export const DEFAULT_BASE_URL = 'https://app.getoutline.com'
 
 /** Canonical `OutlineAccount` factory. Applies the `baseUrl` default. */
 export function makeOutlineAccount(input: {

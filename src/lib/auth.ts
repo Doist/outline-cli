@@ -1,25 +1,38 @@
 import { SecureStoreUnavailableError } from '@doist/cli-core/auth'
-import { createOutlineTokenStore, getActiveTokenSource } from './auth-provider.js'
+import { TOKEN_ENV_VAR } from './auth-constants.js'
+import {
+    createOutlineTokenStore,
+    getActiveTokenSource,
+    type OutlineTokenStore,
+} from './auth-provider.js'
 import { getConfig } from './config.js'
 import { CliError } from './errors.js'
+import { DEFAULT_BASE_URL } from './outline-account.js'
 import { getDefaultUserRecord } from './user-records.js'
 
-export { SecureStoreUnavailableError, getActiveTokenSource }
-
-export const TOKEN_ENV_VAR = 'OUTLINE_API_TOKEN'
-
-const DEFAULT_BASE_URL = 'https://app.getoutline.com'
+export { SecureStoreUnavailableError, getActiveTokenSource, TOKEN_ENV_VAR }
 
 export class NoTokenError extends CliError {
     constructor() {
         super(
             'NO_TOKEN',
             `No API token found. Set ${TOKEN_ENV_VAR} env var or run: ol auth login`,
-            ['Set OUTLINE_API_TOKEN or run: ol auth login'],
+            [`Set ${TOKEN_ENV_VAR} or run: ol auth login`],
             'info',
         )
         this.name = 'NoTokenError'
     }
+}
+
+/**
+ * Module-level token-store singleton. Built lazily on first call; reused
+ * across every `apiRequest` so the request hot path doesn't reconstruct
+ * the keyring + user-record adapters per POST.
+ */
+let storeSingleton: OutlineTokenStore | undefined
+function tokenStore(): OutlineTokenStore {
+    if (!storeSingleton) storeSingleton = createOutlineTokenStore()
+    return storeSingleton
 }
 
 /**
@@ -28,7 +41,7 @@ export class NoTokenError extends CliError {
  * hasn't completed.
  */
 export async function getApiToken(): Promise<string> {
-    const snapshot = await createOutlineTokenStore().active()
+    const snapshot = await tokenStore().active()
     if (!snapshot || !snapshot.token) throw new NoTokenError()
     return snapshot.token
 }
