@@ -65,8 +65,8 @@ describe('exchangeCode persists the full bundle (refresh + expiry)', () => {
         expect(result.accessToken).toBe('at-1')
         expect(result.refreshToken).toBe('rt-1')
         // expires_in=3600 → 1 hour into the future, with a few ms slop.
-        expect(result.accessTokenExpiresAt).toBeGreaterThanOrEqual(before + 3_600_000)
-        expect(result.accessTokenExpiresAt).toBeLessThanOrEqual(Date.now() + 3_600_000 + 1000)
+        expect(result.expiresAt).toBeGreaterThanOrEqual(before + 3_600_000)
+        expect(result.expiresAt).toBeLessThanOrEqual(Date.now() + 3_600_000 + 1000)
     })
 
     it('returns just accessToken when the token endpoint omits refresh + expiry (server config)', async () => {
@@ -87,7 +87,7 @@ describe('exchangeCode persists the full bundle (refresh + expiry)', () => {
 
         expect(result.accessToken).toBe('at-1')
         expect(result.refreshToken).toBeUndefined()
-        expect(result.accessTokenExpiresAt).toBeUndefined()
+        expect(result.expiresAt).toBeUndefined()
     })
 })
 

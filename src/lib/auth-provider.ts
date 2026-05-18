@@ -143,7 +143,7 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
             return {
                 accessToken: json.access_token,
                 refreshToken: json.refresh_token,
-                accessTokenExpiresAt:
+                expiresAt:
                     typeof json.expires_in === 'number'
                         ? Date.now() + json.expires_in * 1000
                         : undefined,
@@ -206,7 +206,7 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
                 // `refreshAccessToken` helper preserves the existing refresh
                 // when the server doesn't return one.
                 refreshToken: json.refresh_token,
-                accessTokenExpiresAt:
+                expiresAt:
                     typeof json.expires_in === 'number'
                         ? Date.now() + json.expires_in * 1000
                         : undefined,
@@ -379,12 +379,22 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             }
             return null
         },
-        async set(account: OutlineAccount, credentials: string | TokenBundle) {
+        async set(account: OutlineAccount, token: string) {
             await ensureMigrated()
-            await inner.set(account, credentials)
+            await inner.set(account, token)
             if (await migrationIsInconclusive()) {
                 // Best-effort: a lingering `api_token` is dormant because
                 // `active()` reads v2 first.
+                await dischargeLegacyState().catch(() => undefined)
+            }
+        },
+        async setBundle(account: OutlineAccount, bundle: TokenBundle) {
+            await ensureMigrated()
+            // Delegate to the inner keyring store, which always exposes
+            // setBundle. The non-null assertion is safe because
+            // `createKeyringTokenStore` guarantees it.
+            await inner.setBundle!(account, bundle)
+            if (await migrationIsInconclusive()) {
                 await dischargeLegacyState().catch(() => undefined)
             }
         },
@@ -407,7 +417,6 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         },
         getLastStorageResult: () => inner.getLastStorageResult(),
         getLastClearResult: () => inner.getLastClearResult(),
-        getRecordsLocation: () => inner.getRecordsLocation(),
     }
 }
 

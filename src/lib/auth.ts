@@ -6,7 +6,7 @@ import {
     getActiveTokenSource,
     type OutlineTokenStore,
 } from './auth-provider.js'
-import { getConfig } from './config.js'
+import { getConfig, getConfigPath } from './config.js'
 import { BaseCliError, CliError } from './errors.js'
 import { DEFAULT_BASE_URL, type OutlineAccount } from './outline-account.js'
 import { getDefaultUserRecord } from './user-records.js'
@@ -75,6 +75,11 @@ export async function getApiTokenForceRefresh(force: boolean): Promise<string> {
             store: tokenStore(),
             provider: authProvider(),
             force,
+            // Sidecar O_EXCL lock so two parallel `ol` invocations don't
+            // both POST refresh and race Outline's refresh-token rotation.
+            // `getConfigPath()` is already an absolute, expanded path
+            // (cli-core does not interpret `~`).
+            lockPath: `${getConfigPath()}.refresh.lock`,
         })
         return refreshed.token
     } catch (error) {
