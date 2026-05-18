@@ -64,16 +64,25 @@ function toRecord(user: StoredUser): UserRecord<OutlineAccount> {
         oauthClientId: user.oauth_client_id,
         teamName: user.team_name,
     })
-    const trimmed = user.token?.trim()
+    const trimmedAccess = user.token?.trim()
+    const trimmedRefresh = user.refresh_token?.trim()
     const record: UserRecord<OutlineAccount> = { account }
-    if (trimmed) record.fallbackToken = trimmed
+    if (trimmedAccess) record.fallbackToken = trimmedAccess
+    if (trimmedRefresh) record.fallbackRefreshToken = trimmedRefresh
+    if (typeof user.access_token_expires_at === 'number') {
+        record.accessTokenExpiresAt = user.access_token_expires_at
+    }
+    if (typeof user.refresh_token_expires_at === 'number') {
+        record.refreshTokenExpiresAt = user.refresh_token_expires_at
+    }
     return record
 }
 
 function fromRecord(record: UserRecord<OutlineAccount>): StoredUser {
     // Replace, don't merge: an absent `fallbackToken` strips the plaintext
     // slot so it can't shadow a fresh keyring-backed write. cli-core contract.
-    const trimmed = record.fallbackToken?.trim()
+    const trimmedAccess = record.fallbackToken?.trim()
+    const trimmedRefresh = record.fallbackRefreshToken?.trim()
     const next: StoredUser = {
         id: record.account.id,
         name: record.account.label,
@@ -81,6 +90,13 @@ function fromRecord(record: UserRecord<OutlineAccount>): StoredUser {
     if (record.account.baseUrl) next.base_url = record.account.baseUrl
     if (record.account.oauthClientId) next.oauth_client_id = record.account.oauthClientId
     if (record.account.teamName) next.team_name = record.account.teamName
-    if (trimmed && trimmed.length > 0) next.token = trimmed
+    if (trimmedAccess && trimmedAccess.length > 0) next.token = trimmedAccess
+    if (trimmedRefresh && trimmedRefresh.length > 0) next.refresh_token = trimmedRefresh
+    if (typeof record.accessTokenExpiresAt === 'number') {
+        next.access_token_expires_at = record.accessTokenExpiresAt
+    }
+    if (typeof record.refreshTokenExpiresAt === 'number') {
+        next.refresh_token_expires_at = record.refreshTokenExpiresAt
+    }
     return next
 }

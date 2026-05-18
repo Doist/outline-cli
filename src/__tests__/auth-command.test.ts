@@ -147,6 +147,8 @@ describe('auth status subcommand', () => {
             team: 'Analytics',
             baseUrl: 'https://test.outline.com',
             source: 'env',
+            accessTokenExpiresAt: undefined,
+            hasRefreshToken: false,
         })
         expect(payload).not.toHaveProperty('name')
         expect(payload).not.toHaveProperty('email')
@@ -168,6 +170,8 @@ describe('auth status subcommand', () => {
             team: 'Analytics',
             baseUrl: 'https://test.outline.com',
             source: 'env',
+            accessTokenExpiresAt: undefined,
+            hasRefreshToken: false,
         })
     })
 

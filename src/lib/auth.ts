@@ -1,13 +1,14 @@
-import { SecureStoreUnavailableError } from '@doist/cli-core/auth'
+import { refreshAccessToken, SecureStoreUnavailableError } from '@doist/cli-core/auth'
 import { TOKEN_ENV_VAR } from './auth-constants.js'
 import {
+    createOutlineAuthProvider,
     createOutlineTokenStore,
     getActiveTokenSource,
     type OutlineTokenStore,
 } from './auth-provider.js'
 import { getConfig } from './config.js'
-import { CliError } from './errors.js'
-import { DEFAULT_BASE_URL } from './outline-account.js'
+import { BaseCliError, CliError } from './errors.js'
+import { DEFAULT_BASE_URL, type OutlineAccount } from './outline-account.js'
 import { getDefaultUserRecord } from './user-records.js'
 
 export { SecureStoreUnavailableError, getActiveTokenSource, TOKEN_ENV_VAR }
@@ -25,9 +26,10 @@ export class NoTokenError extends CliError {
 }
 
 /**
- * Module-level token-store singleton. Built lazily on first call; reused
- * across every `apiRequest` so the request hot path doesn't reconstruct
- * the keyring + user-record adapters per POST.
+ * Module-level token-store + provider singletons. Built lazily on first
+ * call; reused across every `apiRequest` so the request hot path doesn't
+ * reconstruct the keyring + user-record adapters (or the provider's resolver
+ * closures) per POST.
  */
 let storeSingleton: OutlineTokenStore | undefined
 function tokenStore(): OutlineTokenStore {
@@ -35,19 +37,63 @@ function tokenStore(): OutlineTokenStore {
     return storeSingleton
 }
 
+let providerSingleton: ReturnType<typeof createOutlineAuthProvider> | undefined
+function authProvider(): ReturnType<typeof createOutlineAuthProvider> {
+    if (!providerSingleton) providerSingleton = createOutlineAuthProvider()
+    return providerSingleton
+}
+
 /**
- * Read the active token. Hot path: when `OUTLINE_API_TOKEN` is set we
- * return it directly without consulting the token store, since
- * `apiRequest` already resolves the base URL separately — going through
- * `store.active()` here would trigger a redundant `getBaseUrl()` lookup
- * per request just to synthesise an account we don't need.
+ * Read the active token, refreshing it silently when the stored access
+ * token has expired (or is within the 60s skew window). The OAuth refresh
+ * grant runs against Outline's `/oauth/token` endpoint and the new bundle
+ * is persisted back to the keyring + user record.
+ *
+ * Env-token short-circuit: when `OUTLINE_API_TOKEN` is set we return it
+ * directly without consulting the token store. The env token is
+ * user-managed; refresh is meaningless and would burn a request.
+ *
+ * `AUTH_REFRESH_UNAVAILABLE` (e.g. v1.7.0 record with no refresh token
+ * stored) and `AUTH_REFRESH_EXPIRED` (refresh token itself expired/revoked)
+ * are translated to `NoTokenError` so the user sees the existing
+ * "run: ol auth login" hint instead of an unfamiliar code.
  */
 export async function getApiToken(): Promise<string> {
     const envToken = process.env[TOKEN_ENV_VAR]?.trim()
     if (envToken) return envToken
-    const snapshot = await tokenStore().active()
-    if (!snapshot?.token) throw new NoTokenError()
-    return snapshot.token
+    return getApiTokenForceRefresh(false)
+}
+
+/**
+ * Internal: shared between proactive `getApiToken()` and the reactive
+ * 401-retry path. `force` skips the expiry-window check and refreshes
+ * immediately (used after the server has rejected the current token).
+ */
+export async function getApiTokenForceRefresh(force: boolean): Promise<string> {
+    try {
+        const refreshed = await refreshAccessToken<OutlineAccount>({
+            store: tokenStore(),
+            provider: authProvider(),
+            force,
+        })
+        return refreshed.token
+    } catch (error) {
+        // Refresh helper surfaces typed codes we want to collapse to the
+        // existing "no token" UX. Anything else (network errors during
+        // refresh, store write failures) propagates with its original code.
+        // `BaseCliError` catches both cli-core-thrown errors (the refresh
+        // path) and ol-cli's own `CliError` subclass.
+        if (error instanceof BaseCliError) {
+            if (
+                error.code === 'NOT_AUTHENTICATED' ||
+                error.code === 'AUTH_REFRESH_UNAVAILABLE' ||
+                error.code === 'AUTH_REFRESH_EXPIRED'
+            ) {
+                throw new NoTokenError()
+            }
+        }
+        throw error
+    }
 }
 
 /**

@@ -262,6 +262,7 @@ describe('createOutlineTokenStore', () => {
 
         expect(snapshot).toEqual({
             token: LEGACY_CONFIG.api_token,
+            bundle: { accessToken: LEGACY_CONFIG.api_token },
             account: STORED_ACCOUNT,
         })
         // v2 consulted first (returned null per the beforeEach default),

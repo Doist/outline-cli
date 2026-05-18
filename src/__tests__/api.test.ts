@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
+    // Returning the same token as `getApiToken` means the 401 retry path
+    // sees "refresh didn't change the token" and surfaces the original
+    // error. Tests that want to exercise the retry override this.
+    getApiTokenForceRefresh: async () => 'test-token',
     getBaseUrl: async () => 'https://test.outline.com',
 }))
 

@@ -9,9 +9,12 @@ import {
 const APP_NAME = 'outline-cli'
 
 /**
- * One row of the `users[]` array. `id` is the Outline user UUID. `token` is
- * a plaintext fallback persisted only when the OS keyring is unavailable at
- * write time (WSL, headless Linux, missing native binary).
+ * One row of the `users[]` array. `id` is the Outline user UUID. `token` and
+ * `refresh_token` are plaintext fallbacks persisted only when the OS keyring
+ * is unavailable at write time (WSL, headless Linux, missing native binary).
+ * `access_token_expires_at` / `refresh_token_expires_at` carry expiry
+ * metadata for the silent-refresh path; they're plain timestamps, never
+ * secrets, so they always live on the record (not the keyring).
  */
 export type StoredUser = {
     id: string
@@ -20,6 +23,11 @@ export type StoredUser = {
     oauth_client_id?: string
     team_name?: string
     token?: string
+    refresh_token?: string
+    /** Unix-epoch ms. */
+    access_token_expires_at?: number
+    /** Unix-epoch ms. */
+    refresh_token_expires_at?: number
 }
 
 export type Config = CoreConfig & {

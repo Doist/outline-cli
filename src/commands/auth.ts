@@ -23,6 +23,35 @@ const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 type StatusData = {
     email: string
     source: 'env' | 'secure-store' | 'config-file'
+    /** Unix-epoch ms — when the access token expires, if known. */
+    accessTokenExpiresAt?: number
+    /** True when a refresh token is stored alongside the access token. */
+    hasRefreshToken: boolean
+}
+
+/**
+ * Format a Unix-epoch ms expiry into a human-relative window for the
+ * status output ("in 12m", "in 3h", "in 2d", "expired 5m ago").
+ */
+function formatExpiresAt(ms: number): string {
+    const deltaMs = ms - Date.now()
+    const abs = Math.abs(deltaMs)
+    const units: Array<[number, string]> = [
+        [1000 * 60 * 60 * 24, 'd'],
+        [1000 * 60 * 60, 'h'],
+        [1000 * 60, 'm'],
+        [1000, 's'],
+    ]
+    let value = 0
+    let unit = 's'
+    for (const [size, label] of units) {
+        if (abs >= size) {
+            value = Math.floor(abs / size)
+            unit = label
+            break
+        }
+    }
+    return deltaMs >= 0 ? `in ${value}${unit}` : `expired ${value}${unit} ago`
 }
 
 function resolvePreferredCallbackPort(): number {
@@ -104,7 +133,7 @@ export function registerAuthCommand(program: Command): void {
     attachStatusCommand<OutlineAccount>(auth, {
         store,
         description: 'Show current authentication state',
-        async fetchLive({ token, account }) {
+        async fetchLive({ token, bundle, account }) {
             try {
                 const [{ data: info }, source] = await Promise.all([
                     apiRequest<AuthInfoResponse>(
@@ -114,7 +143,12 @@ export function registerAuthCommand(program: Command): void {
                     ),
                     getActiveTokenSource(),
                 ])
-                statusData = { email: info.user.email, source }
+                statusData = {
+                    email: info.user.email,
+                    source,
+                    accessTokenExpiresAt: bundle.accessTokenExpiresAt,
+                    hasRefreshToken: Boolean(bundle.refreshToken),
+                }
                 return {
                     ...account,
                     id: info.user.id,
@@ -133,13 +167,25 @@ export function registerAuthCommand(program: Command): void {
         },
         renderText({ account }) {
             if (!statusData) throw new Error('status renderText called before fetchLive')
-            return [
+            const lines = [
                 `${chalk.green('✓')} Authenticated`,
                 `  Team: ${chalk.bold(account.teamName ?? '')}`,
                 `  User: ${account.label} (${statusData.email})`,
                 `  Base URL: ${account.baseUrl}`,
                 `  Token source: ${statusData.source}`,
             ]
+            // Only surface refresh metadata when we actually have it — env-var
+            // tokens and pre-v1.8.0 records won't carry expiry, and a blank
+            // "Expires: never" line on those is noise.
+            if (typeof statusData.accessTokenExpiresAt === 'number') {
+                lines.push(
+                    `  Access token expires: ${formatExpiresAt(statusData.accessTokenExpiresAt)}`,
+                )
+            }
+            if (statusData.hasRefreshToken) {
+                lines.push('  Refresh: enabled (silent re-auth on expiry)')
+            }
+            return lines
         },
         renderJson({ account }) {
             if (!statusData) throw new Error('status renderJson called before fetchLive')
@@ -148,6 +194,8 @@ export function registerAuthCommand(program: Command): void {
                 team: account.teamName,
                 baseUrl: account.baseUrl,
                 source: statusData.source,
+                accessTokenExpiresAt: statusData.accessTokenExpiresAt,
+                hasRefreshToken: statusData.hasRefreshToken,
             }
         },
         onNotAuthenticated() {

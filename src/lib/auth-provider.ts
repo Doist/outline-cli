@@ -4,9 +4,12 @@ import {
     type AuthProvider,
     createKeyringTokenStore,
     deriveChallenge,
+    type ExchangeResult,
     generateVerifier,
     type KeyringTokenStore,
     type MigrateAuthResult,
+    type RefreshInput,
+    type TokenBundle,
 } from '@doist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
@@ -120,6 +123,8 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
 
             const json = (await res.json().catch(() => ({}))) as {
                 access_token?: string
+                refresh_token?: string
+                expires_in?: number
                 error?: string
                 error_description?: string
                 message?: string
@@ -135,7 +140,80 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
                 throw new Error('OAuth token exchange did not return an access token.')
             }
 
-            return { accessToken: json.access_token }
+            return {
+                accessToken: json.access_token,
+                refreshToken: json.refresh_token,
+                accessTokenExpiresAt:
+                    typeof json.expires_in === 'number'
+                        ? Date.now() + json.expires_in * 1000
+                        : undefined,
+            }
+        },
+
+        async refreshToken(
+            input: RefreshInput<OutlineAccount>,
+        ): Promise<ExchangeResult<OutlineAccount>> {
+            // At refresh time the user is long past the authorize step, so
+            // there is no PKCE handshake. We rebuild what we need from the
+            // stored account: Outline OAuth refresh on a public client takes
+            // `grant_type=refresh_token` + `refresh_token` + `client_id`,
+            // no client_secret, no code_verifier.
+            const baseUrl = input.account.baseUrl?.replace(/\/$/, '')
+            const clientId = input.account.oauthClientId
+            if (!baseUrl || !clientId) {
+                throw new Error(
+                    'Cannot refresh: stored account is missing baseUrl or oauthClientId. Run: ol auth login',
+                )
+            }
+
+            const params = new URLSearchParams({
+                grant_type: 'refresh_token',
+                refresh_token: input.refreshToken,
+                client_id: clientId,
+            })
+
+            const res = await fetchWithRetry({
+                url: `${baseUrl}/oauth/token`,
+                options: {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                },
+            })
+
+            const json = (await res.json().catch(() => ({}))) as {
+                access_token?: string
+                refresh_token?: string
+                expires_in?: number
+                error?: string
+                error_description?: string
+                message?: string
+            }
+
+            if (!res.ok) {
+                const message =
+                    json.error_description || json.message || json.error || res.statusText
+                throw new Error(`OAuth refresh failed: ${message}`)
+            }
+            if (!json.access_token) {
+                throw new Error('OAuth refresh did not return an access token.')
+            }
+
+            return {
+                accessToken: json.access_token,
+                // Some OAuth servers rotate the refresh token on each refresh,
+                // others reuse it. Persist whatever comes back; the caller's
+                // `refreshAccessToken` helper preserves the existing refresh
+                // when the server doesn't return one.
+                refreshToken: json.refresh_token,
+                accessTokenExpiresAt:
+                    typeof json.expires_in === 'number'
+                        ? Date.now() + json.expires_in * 1000
+                        : undefined,
+                // Pass the account through so the helper doesn't have to
+                // re-derive it (PKCE provider does the same).
+                account: input.account,
+            }
         },
 
         async validateToken({ token, handshake }) {
@@ -189,6 +267,7 @@ function migrationIsConclusive(result: MigrateAuthResult<OutlineAccount>): boole
  */
 async function readLegacyTokenSnapshot(): Promise<{
     token: string
+    bundle: TokenBundle
     account: OutlineAccount
 } | null> {
     const config = await getConfig()
@@ -196,6 +275,7 @@ async function readLegacyTokenSnapshot(): Promise<{
     if (!token) return null
     return {
         token,
+        bundle: { accessToken: token },
         account: makeOutlineAccount({
             id: config.auth_user_id ?? '',
             label: config.auth_user_name ?? '',
@@ -280,6 +360,7 @@ export function createOutlineTokenStore(): OutlineTokenStore {
                 if (envToken) {
                     return {
                         token: envToken,
+                        bundle: { accessToken: envToken },
                         account: makeOutlineAccount({
                             id: '',
                             label: '',
@@ -298,9 +379,9 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             }
             return null
         },
-        async set(account: OutlineAccount, token: string) {
+        async set(account: OutlineAccount, credentials: string | TokenBundle) {
             await ensureMigrated()
-            await inner.set(account, token)
+            await inner.set(account, credentials)
             if (await migrationIsInconclusive()) {
                 // Best-effort: a lingering `api_token` is dormant because
                 // `active()` reads v2 first.
@@ -326,6 +407,7 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         },
         getLastStorageResult: () => inner.getLastStorageResult(),
         getLastClearResult: () => inner.getLastClearResult(),
+        getRecordsLocation: () => inner.getRecordsLocation(),
     }
 }
 

@@ -1,5 +1,6 @@
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
-import { getApiToken, getBaseUrl } from './auth.js'
+import { TOKEN_ENV_VAR } from './auth-constants.js'
+import { getApiToken, getApiTokenForceRefresh, getBaseUrl } from './auth.js'
 import { type SpinnerOptions, withSpinner } from './spinner.js'
 
 /**
@@ -53,7 +54,11 @@ export type ApiRequestOverrides = {
 }
 
 /**
- * Core API request function without spinner wrapping.
+ * Core API request function without spinner wrapping. Implements the
+ * reactive half of OAuth refresh: on a 401 with a stored token (i.e. not
+ * the env-var path, and not a caller-supplied override), force a single
+ * refresh + retry. A second 401 after the refresh propagates the error
+ * untouched — at that point the user really has to re-authenticate.
  */
 async function rawApiRequest<T>(
     path: string,
@@ -77,6 +82,28 @@ async function rawApiRequest<T>(
         },
     })
 
+    if (res.status === 401 && !overrides.token && !process.env[TOKEN_ENV_VAR]?.trim()) {
+        const refreshed = await getApiTokenForceRefresh(true).catch(() => null)
+        if (refreshed && refreshed !== resolvedToken) {
+            const retry = await fetchWithRetry({
+                url: `${resolvedBaseUrl}/api/${path}`,
+                options: {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${refreshed}`,
+                    },
+                    body: JSON.stringify(body),
+                },
+            })
+            return finalizeResponse<T>(retry)
+        }
+    }
+
+    return finalizeResponse<T>(res)
+}
+
+async function finalizeResponse<T>(res: Response): Promise<PaginatedResult<T>> {
     if (!res.ok) {
         let message = `API error: ${res.status} ${res.statusText}`
         try {
