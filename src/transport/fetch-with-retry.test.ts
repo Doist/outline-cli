@@ -36,7 +36,7 @@ describe('fetchWithRetry', () => {
     })
 
     afterEach(async () => {
-        const { resetDefaultDispatcherForTests } = await import('../transport/http-dispatcher.js')
+        const { resetDefaultDispatcherForTests } = await import('./http-dispatcher.js')
         await resetDefaultDispatcherForTests()
         restoreProxyEnv()
         vi.useRealTimers()
@@ -55,8 +55,8 @@ describe('fetchWithRetry', () => {
         )
         vi.stubGlobal('fetch', fetchMock)
 
-        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
-        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
+        const { fetchWithRetry } = await import('./fetch-with-retry.js')
         const response = await fetchWithRetry({
             url: 'https://test.outline.com/api/documents.info',
             options: { method: 'POST' },
@@ -83,7 +83,7 @@ describe('fetchWithRetry', () => {
             )
         vi.stubGlobal('fetch', fetchMock)
 
-        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const { fetchWithRetry } = await import('./fetch-with-retry.js')
         const response = await fetchWithRetry({
             url: 'https://test.outline.com/api/documents.info',
             retryConfig: {
@@ -126,7 +126,7 @@ describe('fetchWithRetry', () => {
             )
         vi.stubGlobal('fetch', fetchMock)
 
-        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const { fetchWithRetry } = await import('./fetch-with-retry.js')
         const requestPromise = fetchWithRetry({
             url: 'https://test.outline.com/api/documents.info',
             options: {
@@ -169,8 +169,8 @@ describe('fetchWithRetry', () => {
         )
         vi.stubGlobal('fetch', fetchMock)
 
-        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
-        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
+        const { fetchWithRetry } = await import('./fetch-with-retry.js')
 
         const requestPromise = fetchWithRetry({
             url: 'https://test.outline.com/api/documents.info',

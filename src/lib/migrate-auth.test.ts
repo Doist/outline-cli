@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { errResponse, okResponse } from './_fixtures/auth.js'
+import { errResponse, okResponse } from '../_fixtures/auth.js'
 
 const fetchMock = vi.hoisted(() => ({ fetchWithRetry: vi.fn() }))
 vi.mock('../transport/fetch-with-retry.js', () => fetchMock)
@@ -14,15 +14,15 @@ const configMock = vi.hoisted(() => ({
     getConfig: vi.fn(),
     updateConfig: vi.fn(),
 }))
-vi.mock('../lib/config.js', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../lib/config.js')>()
+vi.mock('./config.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./config.js')>()
     return { ...actual, getConfig: configMock.getConfig, updateConfig: configMock.updateConfig }
 })
 
 /** Run the wrapper once, return the options handed to cli-core. */
 async function captureCliCoreOptions() {
     cliCoreMock.migrateLegacyAuth.mockResolvedValue({ status: 'no-legacy-state' })
-    const { runMigrateLegacyAuth } = await import('../lib/migrate-auth.js')
+    const { runMigrateLegacyAuth } = await import('./migrate-auth.js')
     await runMigrateLegacyAuth()
     return cliCoreMock.migrateLegacyAuth.mock.calls[0][0]
 }

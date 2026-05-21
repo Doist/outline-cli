@@ -39,7 +39,7 @@ describe('spinner wiring', () => {
     async function loadIsDisabled(): Promise<() => boolean> {
         vi.resetModules()
         createSpinnerMock.mockClear()
-        await import('../lib/spinner.js')
+        await import('./spinner.js')
         expect(createSpinnerMock).toHaveBeenCalledWith(
             expect.objectContaining({ isDisabled: expect.any(Function) }),
         )

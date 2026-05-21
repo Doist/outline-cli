@@ -2,8 +2,8 @@ import { mkdir, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createInstaller } from '../lib/skills/create-installer.js'
-import { getInstaller, listAgents, skillInstallers } from '../lib/skills/index.js'
+import { createInstaller } from './create-installer.js'
+import { getInstaller, listAgents, skillInstallers } from './index.js'
 
 const AGENTS = [
     {

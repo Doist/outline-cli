@@ -7,7 +7,7 @@ const authMocks = vi.hoisted(() => ({
     reactiveRefresh: vi.fn(async () => false),
 }))
 
-vi.mock('../lib/auth.js', () => authMocks)
+vi.mock('./auth.js', () => authMocks)
 
 vi.mock('../transport/fetch-with-retry.js', () => ({
     fetchWithRetry: vi.fn(),
@@ -32,7 +32,7 @@ describe('apiRequest', () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         ;(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse)
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         await apiRequest('documents.info', { id: 'abc' })
 
         expect(fetchWithRetry).toHaveBeenCalledWith({
@@ -56,7 +56,7 @@ describe('apiRequest', () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         ;(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse)
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         const result = await apiRequest('documents.list')
 
         expect(result.data).toEqual([{ id: '1' }])
@@ -73,7 +73,7 @@ describe('apiRequest', () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         ;(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse)
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         await expect(apiRequest('documents.list')).rejects.toThrow('Server exploded')
     })
 
@@ -89,7 +89,7 @@ describe('apiRequest', () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         ;(fetchWithRetry as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse)
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         await expect(apiRequest('documents.list')).rejects.toThrow(
             'API error: 500 Internal Server Error',
         )
@@ -110,7 +110,7 @@ describe('apiRequest', () => {
             .mockResolvedValueOnce('stale-token')
             .mockResolvedValueOnce('rotated-token')
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         const result = await apiRequest('documents.info', { id: 'abc' })
 
         expect(result.data).toEqual({ id: 'ok' })
@@ -126,7 +126,7 @@ describe('apiRequest', () => {
         f.mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
         authMocks.proactiveRefresh.mockResolvedValueOnce('rotated-proactive')
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         await apiRequest('documents.list')
 
         expect(authMocks.proactiveRefresh).toHaveBeenCalledTimes(1)
@@ -144,7 +144,7 @@ describe('apiRequest', () => {
             json: async () => ({ data: {} }),
         })
 
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         await apiRequest('documents.list')
 
         expect(authMocks.proactiveRefresh).not.toHaveBeenCalled()

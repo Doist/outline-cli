@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SKIPPED_RESULT } from './_fixtures/auth.js'
+import { SKIPPED_RESULT } from '../_fixtures/auth.js'
 
 const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}-auth`)
 const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
@@ -13,7 +13,7 @@ const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, 'config.json')
 // behind it. Mocking `runMigrateLegacyAuth` directly is more robust than
 // stubbing transitive network deps: tests don't have to know how
 // migration internally decides to skip.
-vi.mock('../lib/migrate-auth.js', () => ({
+vi.mock('./migrate-auth.js', () => ({
     runMigrateLegacyAuth: vi.fn(async () => SKIPPED_RESULT),
 }))
 
@@ -36,35 +36,35 @@ describe('auth', () => {
 
     it('getApiToken reads from env var first', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const { getApiToken } = await import('../lib/auth.js')
+        const { getApiToken } = await import('./auth.js')
         await expect(getApiToken()).resolves.toBe('env-token')
     })
 
     it('getApiToken falls back to the legacy plaintext config token', async () => {
         writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ api_token: 'file-token' }))
-        const { getApiToken } = await import('../lib/auth.js')
+        const { getApiToken } = await import('./auth.js')
         await expect(getApiToken()).resolves.toBe('file-token')
     })
 
     it('getApiToken throws when no token available', async () => {
-        const { getApiToken } = await import('../lib/auth.js')
+        const { getApiToken } = await import('./auth.js')
         await expect(getApiToken()).rejects.toThrow('No API token found')
     })
 
     it('getBaseUrl returns env var first', async () => {
         process.env.OUTLINE_URL = 'https://custom.example.com'
-        const { getBaseUrl } = await import('../lib/auth.js')
+        const { getBaseUrl } = await import('./auth.js')
         await expect(getBaseUrl()).resolves.toBe('https://custom.example.com')
     })
 
     it('getBaseUrl strips trailing slash', async () => {
         process.env.OUTLINE_URL = 'https://custom.example.com/'
-        const { getBaseUrl } = await import('../lib/auth.js')
+        const { getBaseUrl } = await import('./auth.js')
         await expect(getBaseUrl()).resolves.toBe('https://custom.example.com')
     })
 
     it('getBaseUrl returns default when nothing configured', async () => {
-        const { getBaseUrl } = await import('../lib/auth.js')
+        const { getBaseUrl } = await import('./auth.js')
         await expect(getBaseUrl()).resolves.toBe('https://app.getoutline.com')
     })
 
@@ -83,25 +83,25 @@ describe('auth', () => {
                 ],
             }),
         )
-        const { getBaseUrl } = await import('../lib/auth.js')
+        const { getBaseUrl } = await import('./auth.js')
         await expect(getBaseUrl()).resolves.toBe('https://wiki.example.com')
     })
 
     it('getBaseUrl reads from the legacy v1 base_url slot', async () => {
         writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ base_url: 'https://legacy.example.com' }))
-        const { getBaseUrl } = await import('../lib/auth.js')
+        const { getBaseUrl } = await import('./auth.js')
         await expect(getBaseUrl()).resolves.toBe('https://legacy.example.com')
     })
 
     it('getOAuthClientId returns env var first', async () => {
         process.env.OUTLINE_OAUTH_CLIENT_ID = 'env-client-id'
-        const { getOAuthClientId } = await import('../lib/auth.js')
+        const { getOAuthClientId } = await import('./auth.js')
         await expect(getOAuthClientId()).resolves.toBe('env-client-id')
     })
 
     it('getOAuthClientId reads from the legacy v1 config slot', async () => {
         writeFileSync(TEST_CONFIG_PATH, JSON.stringify({ oauth_client_id: 'file-client-id' }))
-        const { getOAuthClientId } = await import('../lib/auth.js')
+        const { getOAuthClientId } = await import('./auth.js')
         await expect(getOAuthClientId()).resolves.toBe('file-client-id')
     })
 
@@ -120,7 +120,7 @@ describe('auth', () => {
                 ],
             }),
         )
-        const { getOAuthClientId } = await import('../lib/auth.js')
+        const { getOAuthClientId } = await import('./auth.js')
         await expect(getOAuthClientId()).resolves.toBe('cid-record')
     })
 
@@ -144,7 +144,7 @@ describe('auth', () => {
                 default_user_id: 'u',
             }),
         )
-        const { reactiveRefresh } = await import('../lib/auth.js')
+        const { reactiveRefresh } = await import('./auth.js')
 
         let caught: unknown
         try {
