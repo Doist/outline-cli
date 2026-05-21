@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/Doist/outline-cli/compare/v1.7.0...v1.8.0) (2026-05-21)
+
+### Features
+
+* **auth:** silent OAuth token refresh ([#75](https://github.com/Doist/outline-cli/issues/75)) ([83996d5](https://github.com/Doist/outline-cli/commit/83996d56810e28e608d91a981fd3b313dcdeb4d3))
+
 ## [1.7.0](https://github.com/Doist/outline-cli/compare/v1.6.0...v1.7.0) (2026-05-17)
 
 ### Features
