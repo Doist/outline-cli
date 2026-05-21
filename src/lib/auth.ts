@@ -1,13 +1,14 @@
-import { SecureStoreUnavailableError } from '@doist/cli-core/auth'
+import { refreshAccessToken, SecureStoreUnavailableError } from '@doist/cli-core/auth'
 import { TOKEN_ENV_VAR } from './auth-constants.js'
 import {
+    createOutlineAuthProvider,
     createOutlineTokenStore,
     getActiveTokenSource,
     type OutlineTokenStore,
 } from './auth-provider.js'
-import { getConfig } from './config.js'
+import { getConfig, getConfigPath } from './config.js'
 import { CliError } from './errors.js'
-import { DEFAULT_BASE_URL } from './outline-account.js'
+import { DEFAULT_BASE_URL, type OutlineAccount } from './outline-account.js'
 import { getDefaultUserRecord } from './user-records.js'
 
 export { SecureStoreUnavailableError, getActiveTokenSource, TOKEN_ENV_VAR }
@@ -33,6 +34,91 @@ let storeSingleton: OutlineTokenStore | undefined
 function tokenStore(): OutlineTokenStore {
     if (!storeSingleton) storeSingleton = createOutlineTokenStore()
     return storeSingleton
+}
+
+let providerSingleton: ReturnType<typeof createOutlineAuthProvider> | undefined
+function authProvider(): ReturnType<typeof createOutlineAuthProvider> {
+    if (!providerSingleton) providerSingleton = createOutlineAuthProvider()
+    return providerSingleton
+}
+
+// Caller-provided O_EXCL lock so concurrent `ol` invocations don't issue
+// parallel refresh grants. Resolved per-call (not cached) to honour test
+// config-path mocking, mirroring `getConfigPath`.
+function refreshLockPath(): string {
+    return `${getConfigPath()}.refresh.lock`
+}
+
+/**
+ * Best-effort proactive rotation before a request. Returns the token to use
+ * (the rotated one, or the current one if no rotation was needed) so the
+ * caller doesn't re-read the store; `undefined` when the default account
+ * isn't refreshable (no refresh token / env / failure) — the caller then
+ * falls back to `getApiToken()` and the 401 path stays authoritative.
+ */
+export async function proactiveRefresh(): Promise<string | undefined> {
+    try {
+        const { bundle } = await refreshAccessToken({
+            store: tokenStore(),
+            provider: authProvider(),
+            lockPath: refreshLockPath(),
+        })
+        return bundle.accessToken
+    } catch {
+        return undefined
+    }
+}
+
+/**
+ * Refresh the *selected* account (not the default) for `auth status`, returning
+ * its current-or-rotated token. Scoped via the account's id + base URL/client
+ * id through the refresh handshake, so `--user <other>` checks and rotates the
+ * right account at the right instance. Env / legacy / record-less accounts
+ * aren't refreshable — the snapshot `fallback` token is returned as-is.
+ */
+export async function refreshedTokenForStatus(
+    account: OutlineAccount,
+    fallback: string,
+): Promise<string> {
+    if (process.env[TOKEN_ENV_VAR]?.trim() || !account.id) return fallback
+    try {
+        const { bundle } = await refreshAccessToken({
+            store: tokenStore(),
+            provider: authProvider(),
+            lockPath: refreshLockPath(),
+            ref: account.id,
+            handshake: { baseUrl: account.baseUrl, clientId: account.oauthClientId },
+        })
+        return bundle.accessToken
+    } catch {
+        return fallback
+    }
+}
+
+/**
+ * Reactive rotation after a 401. Returns `true` when the token rotated (the
+ * caller retries once). A rejected/absent refresh token surfaces as
+ * `NoTokenError` (re-login); a transient failure propagates unchanged.
+ */
+export async function reactiveRefresh(): Promise<boolean> {
+    try {
+        const result = await refreshAccessToken({
+            store: tokenStore(),
+            provider: authProvider(),
+            lockPath: refreshLockPath(),
+            force: true,
+        })
+        return result.rotated
+    } catch (err) {
+        // Match on the structural `.code` rather than `instanceof`: cli-core
+        // throws its own CliError, and class identity isn't reliable across
+        // package boundaries (duplicate module instances under linking).
+        const code = (err as { code?: unknown } | null)?.code
+        if (code === 'AUTH_REFRESH_EXPIRED' || code === 'AUTH_REFRESH_UNAVAILABLE') {
+            throw new NoTokenError()
+        }
+        throw err
+    }
 }
 
 /**

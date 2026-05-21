@@ -16,6 +16,7 @@ import {
     type OutlineAccount,
     type OutlineTokenStore,
 } from '../lib/auth-provider.js'
+import { refreshedTokenForStatus } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
@@ -104,13 +105,20 @@ export function registerAuthCommand(program: Command): void {
     attachStatusCommand<OutlineAccount>(auth, {
         store,
         description: 'Show current authentication state',
-        async fetchLive({ token, account }) {
+        async fetchLive({ account, token }) {
             try {
+                // Refresh the *selected* account before the check (scoped via
+                // its id + base URL/client id), then probe with the rotated
+                // token. Outline access tokens last ~an hour; without this
+                // `auth status` can't self-heal even though normal commands
+                // do. Passing the resolved token keeps the check tied to the
+                // requested account rather than the default.
+                const liveToken = await refreshedTokenForStatus(account, token)
                 const [{ data: info }, source] = await Promise.all([
                     apiRequest<AuthInfoResponse>(
                         'auth.info',
                         {},
-                        { token, baseUrl: account.baseUrl },
+                        { token: liveToken, baseUrl: account.baseUrl },
                     ),
                     getActiveTokenSource(),
                 ])

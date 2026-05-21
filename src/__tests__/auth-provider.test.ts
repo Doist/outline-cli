@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    AUTH_INFO,
+    errResponse,
     LEGACY_CLEAR_PAYLOAD,
     LEGACY_CONFIG,
     okResponse,
@@ -20,7 +22,9 @@ const keyringMocks = vi.hoisted(() => ({
     createKeyringTokenStore: vi.fn(),
     inner: {
         active: vi.fn(),
+        activeBundle: vi.fn(),
         set: vi.fn(),
+        setBundle: vi.fn(),
         clear: vi.fn(),
         list: vi.fn(),
         setDefault: vi.fn(),
@@ -94,15 +98,14 @@ describe('createOutlineAuthProvider', () => {
         })
         expect(url.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]+$/)
 
+        // createPkceProvider carries the verifier + resolved client id through
+        // the handshake (base URL rides the provider closure, not the handshake).
         const handshake = result.handshake as Record<string, string>
-        expect(handshake).toMatchObject({
-            baseUrl: 'https://wiki.example.com',
-            clientId: 'cid-xyz',
-        })
+        expect(handshake.clientId).toBe('cid-xyz')
         expect(handshake.codeVerifier?.length).toBeGreaterThan(40)
     })
 
-    it('exchangeCode posts via fetchWithRetry and surfaces provider errors', async () => {
+    it('exchangeCode posts to the token endpoint via outline transport; maps failures to the typed code', async () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         vi.mocked(fetchWithRetry).mockResolvedValueOnce(okResponse({ access_token: 'tok-abc' }))
 
@@ -124,7 +127,7 @@ describe('createOutlineAuthProvider', () => {
 
         const args = vi.mocked(fetchWithRetry).mock.calls[0][0]
         expect(args.url).toBe('https://wiki.example.com/oauth/token')
-        const body = new URLSearchParams(args.options.body as string)
+        const body = new URLSearchParams(args.options?.body as string)
         expect(Object.fromEntries(body)).toEqual({
             grant_type: 'authorization_code',
             client_id: 'cid-xyz',
@@ -133,11 +136,9 @@ describe('createOutlineAuthProvider', () => {
             code: 'auth-code',
         })
 
-        vi.mocked(fetchWithRetry).mockResolvedValueOnce({
-            ok: false,
-            statusText: 'Bad Request',
-            json: async () => ({ error_description: 'Authorization code expired' }),
-        } as Response)
+        vi.mocked(fetchWithRetry).mockResolvedValueOnce(
+            errResponse(400, 'Bad Request', { error_description: 'Authorization code expired' }),
+        )
         await expect(
             provider.exchangeCode({
                 code: 'c',
@@ -145,22 +146,29 @@ describe('createOutlineAuthProvider', () => {
                 redirectUri: 'http://localhost:54969/callback',
                 handshake,
             }),
-        ).rejects.toThrow('OAuth token exchange failed: Authorization code expired')
+        ).rejects.toMatchObject({ code: 'AUTH_TOKEN_EXCHANGE_FAILED' })
     })
 
-    it('validateToken calls auth.info with the unsaved token and builds an OutlineAccount', async () => {
+    it('validateToken builds an OutlineAccount using the base URL captured at authorize', async () => {
         const { apiRequest } = await import('../lib/api.js')
-        vi.mocked(apiRequest).mockResolvedValue({
-            data: {
-                user: { id: 'user-uuid', name: 'Ada Lovelace', email: 'ada@example.com' },
-                team: { name: 'Analytics', subdomain: 'analytics' },
-            },
-        })
+        vi.mocked(apiRequest).mockResolvedValue({ data: AUTH_INFO })
 
         const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
-        const account = await createOutlineAuthProvider().validateToken({
+        const provider = createOutlineAuthProvider()
+        // authorize seeds the provider's base-URL closure (from the flag),
+        // which validate then reuses instead of a handshake field.
+        await provider.authorize({
+            redirectUri: 'http://localhost:54969/callback',
+            state: 's',
+            scopes: [],
+            readOnly: false,
+            flags: { baseUrl: 'https://wiki.example.com/', clientId: 'cid-xyz' },
+            handshake: {},
+        })
+
+        const account = await provider.validateToken({
             token: 'tok-abc',
-            handshake: { baseUrl: 'https://wiki.example.com', clientId: 'cid-xyz' },
+            handshake: { clientId: 'cid-xyz' },
         })
 
         expect(account).toEqual({
@@ -176,6 +184,52 @@ describe('createOutlineAuthProvider', () => {
             { token: 'tok-abc', baseUrl: 'https://wiki.example.com' },
         )
     })
+
+    it('refreshToken rotates the bundle, resolving base URL + client id from stored config (no prompt)', async () => {
+        // A fresh provider used only for silent refresh never runs authorize,
+        // so the resolvers fall back to the logged-in record — never prompting.
+        configMocks.getConfig.mockResolvedValue({
+            users: [
+                {
+                    id: 'user-uuid',
+                    name: 'Ada',
+                    base_url: 'https://wiki.example.com',
+                    oauth_client_id: 'cid-xyz',
+                },
+            ],
+            default_user_id: 'user-uuid',
+        })
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        vi.mocked(fetchWithRetry).mockClear() // isolate this test's POST from earlier ones
+        vi.mocked(fetchWithRetry).mockResolvedValue(
+            Response.json({
+                access_token: 'tok-new',
+                refresh_token: 'r-new',
+                expires_in: 3600,
+                token_type: 'bearer',
+            }),
+        )
+
+        const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
+        const result = await createOutlineAuthProvider().refreshToken?.({
+            refreshToken: 'r-old',
+            handshake: {},
+        })
+
+        expect(result?.accessToken).toBe('tok-new')
+        expect(result?.refreshToken).toBe('r-new')
+        const called = vi.mocked(fetchWithRetry).mock.calls[0][0]
+        const calledUrl = called.url instanceof Request ? called.url.url : String(called.url)
+        expect(calledUrl).toBe('https://wiki.example.com/oauth/token')
+
+        // Public-client form body: a regression to confidential-client refresh
+        // (sending a client_secret) must fail here.
+        const body = new URLSearchParams(called.options?.body as string)
+        expect(body.get('grant_type')).toBe('refresh_token')
+        expect(body.get('refresh_token')).toBe('r-old')
+        expect(body.get('client_id')).toBe('cid-xyz')
+        expect(body.has('client_secret')).toBe(false)
+    })
 })
 
 describe('createOutlineTokenStore', () => {
@@ -184,7 +238,9 @@ describe('createOutlineTokenStore', () => {
         delete process.env.OUTLINE_URL
         keyringMocks.createKeyringTokenStore.mockClear()
         keyringMocks.inner.active.mockReset().mockResolvedValue(null)
+        keyringMocks.inner.activeBundle.mockReset().mockResolvedValue(null)
         keyringMocks.inner.set.mockReset().mockResolvedValue(undefined)
+        keyringMocks.inner.setBundle.mockReset().mockResolvedValue(undefined)
         keyringMocks.inner.clear.mockReset().mockResolvedValue(undefined)
         keyringMocks.inner.list.mockReset().mockResolvedValue([])
         keyringMocks.inner.setDefault.mockReset().mockResolvedValue(undefined)
@@ -396,6 +452,46 @@ describe('createOutlineTokenStore', () => {
         await createOutlineTokenStore().set(STORED_ACCOUNT, 'tk_new')
 
         expect(callOrder).toEqual(['migrate', 'set'])
+    })
+
+    it('activeBundle env short-circuit returns an access-only bundle and bypasses inner', async () => {
+        vi.stubEnv(TOKEN_ENV_VAR, 'env_token_value')
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const snapshot = await createOutlineTokenStore().activeBundle()
+
+        expect(snapshot?.bundle).toEqual({ accessToken: 'env_token_value' })
+        expect(keyringMocks.inner.activeBundle).not.toHaveBeenCalled()
+    })
+
+    it('activeBundle forwards to the v2 store, preserving refresh state', async () => {
+        keyringMocks.inner.activeBundle.mockResolvedValue({
+            account: STORED_ACCOUNT,
+            bundle: { accessToken: 'a', refreshToken: 'r', accessTokenExpiresAt: 123 },
+        })
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        const snapshot = await createOutlineTokenStore().activeBundle()
+
+        expect(snapshot?.bundle).toEqual({
+            accessToken: 'a',
+            refreshToken: 'r',
+            accessTokenExpiresAt: 123,
+        })
+        expect(keyringMocks.inner.activeBundle).toHaveBeenCalledTimes(1)
+    })
+
+    it('setBundle forwards to inner and discharges legacy state when migration is inconclusive', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        const bundle = { accessToken: 'a', refreshToken: 'r' }
+        const createOutlineTokenStore = await loadCreateOutlineTokenStore()
+
+        await createOutlineTokenStore().setBundle(STORED_ACCOUNT, bundle, { promoteDefault: true })
+
+        expect(keyringMocks.inner.setBundle).toHaveBeenCalledWith(STORED_ACCOUNT, bundle, {
+            promoteDefault: true,
+        })
+        expect(configMocks.updateConfig).toHaveBeenCalledWith(LEGACY_CLEAR_PAYLOAD)
     })
 })
 

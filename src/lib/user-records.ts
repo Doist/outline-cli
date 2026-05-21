@@ -64,16 +64,22 @@ function toRecord(user: StoredUser): UserRecord<OutlineAccount> {
         oauthClientId: user.oauth_client_id,
         teamName: user.team_name,
     })
-    const trimmed = user.token?.trim()
     const record: UserRecord<OutlineAccount> = { account }
-    if (trimmed) record.fallbackToken = trimmed
+    const token = user.token?.trim()
+    if (token) record.fallbackToken = token
+    if (user.access_token_expires_at !== undefined) {
+        record.accessTokenExpiresAt = user.access_token_expires_at
+    }
+    if (user.refresh_token_expires_at !== undefined) {
+        record.refreshTokenExpiresAt = user.refresh_token_expires_at
+    }
+    if (user.has_refresh_token !== undefined) record.hasRefreshToken = user.has_refresh_token
     return record
 }
 
 function fromRecord(record: UserRecord<OutlineAccount>): StoredUser {
-    // Replace, don't merge: an absent `fallbackToken` strips the plaintext
-    // slot so it can't shadow a fresh keyring-backed write. cli-core contract.
-    const trimmed = record.fallbackToken?.trim()
+    // Replace, don't merge: absent fields strip the corresponding slots so a
+    // stale value can't shadow a fresh keyring-backed write. cli-core contract.
     const next: StoredUser = {
         id: record.account.id,
         name: record.account.label,
@@ -81,6 +87,19 @@ function fromRecord(record: UserRecord<OutlineAccount>): StoredUser {
     if (record.account.baseUrl) next.base_url = record.account.baseUrl
     if (record.account.oauthClientId) next.oauth_client_id = record.account.oauthClientId
     if (record.account.teamName) next.team_name = record.account.teamName
-    if (trimmed && trimmed.length > 0) next.token = trimmed
+    const token = record.fallbackToken?.trim()
+    if (token) next.token = token
+    // Deliberately NOT persisting `fallbackRefreshToken`: the refresh token is
+    // a long-lived credential and must stay in the secure store only. If the
+    // keyring is offline at write time, the refresh token isn't persisted, so
+    // that account fails closed (re-auth on next expiry) rather than leaving a
+    // long-lived secret in plaintext config. (Doist secrets-management standard.)
+    if (record.accessTokenExpiresAt !== undefined) {
+        next.access_token_expires_at = record.accessTokenExpiresAt
+    }
+    if (record.refreshTokenExpiresAt !== undefined) {
+        next.refresh_token_expires_at = record.refreshTokenExpiresAt
+    }
+    if (record.hasRefreshToken !== undefined) next.has_refresh_token = record.hasRefreshToken
     return next
 }

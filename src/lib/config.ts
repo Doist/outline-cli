@@ -19,7 +19,14 @@ export type StoredUser = {
     base_url?: string
     oauth_client_id?: string
     team_name?: string
+    /** Plaintext access-token fallback, present only when the keyring was unavailable at write time. */
     token?: string
+    /** Access-token expiry (unix-epoch ms); drives proactive refresh. */
+    access_token_expires_at?: number
+    /** Refresh-token expiry (unix-epoch ms), when the server returns one. */
+    refresh_token_expires_at?: number
+    /** Whether a refresh token is stored (keyring slot or `refresh_token`). */
+    has_refresh_token?: boolean
 }
 
 export type Config = CoreConfig & {

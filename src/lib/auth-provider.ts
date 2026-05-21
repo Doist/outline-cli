@@ -3,10 +3,10 @@ import {
     type AccountRef,
     type AuthProvider,
     createKeyringTokenStore,
-    deriveChallenge,
-    generateVerifier,
+    createPkceProvider,
     type KeyringTokenStore,
     type MigrateAuthResult,
+    type TokenBundle,
 } from '@doist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
@@ -25,16 +25,6 @@ export type AuthInfoResponse = {
 }
 
 export type OutlineTokenStore = KeyringTokenStore<OutlineAccount>
-
-type OutlineHandshake = Record<string, unknown> & {
-    baseUrl: string
-    clientId: string
-    codeVerifier?: string
-}
-
-function asHandshake(value: Record<string, unknown>): OutlineHandshake {
-    return value as OutlineHandshake
-}
 
 function stringFlag(flags: Record<string, unknown>, key: string): string | undefined {
     const value = flags[key]
@@ -75,88 +65,61 @@ async function resolveClientId(flags: Record<string, unknown>): Promise<string> 
     return answered
 }
 
+/**
+ * Routes cli-core's OAuth HTTP through outline's transport so the proxy /
+ * decompression dispatcher applies — to the token exchange AND the
+ * oauth4webapi refresh grant (cli-core threads this into oauth4webapi's
+ * `customFetch`), which would otherwise capture the bare global `fetch`.
+ */
+const outlineFetch: typeof fetch = (input, init) =>
+    fetchWithRetry({ url: input as RequestInfo | URL, options: init ?? {} })
+
 export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
-    return {
-        async authorize({ redirectUri, state, flags }) {
-            const baseUrl = await resolveBaseUrl(flags)
-            const clientId = await resolveClientId(flags)
-            const codeVerifier = generateVerifier()
-            const codeChallenge = deriveChallenge(codeVerifier)
-
-            const url = new URL(`${baseUrl}/oauth/authorize`)
-            url.searchParams.set('client_id', clientId)
-            url.searchParams.set('response_type', 'code')
-            url.searchParams.set('code_challenge', codeChallenge)
-            url.searchParams.set('code_challenge_method', 'S256')
-            url.searchParams.set('redirect_uri', redirectUri)
-            url.searchParams.set('state', state)
-
-            const handshake: OutlineHandshake = { baseUrl, clientId, codeVerifier }
-            return { authorizeUrl: url.toString(), handshake }
+    // Captured at `authorize` (which may prompt for it) and reused by
+    // `exchangeCode` / `validate` so a single login can't double-prompt. A
+    // provider built only for silent refresh never runs `authorize`, so this
+    // stays undefined there and `tokenUrl` falls back to stored config — the
+    // refresh path must never prompt.
+    let baseUrl: string | undefined
+    return createPkceProvider<OutlineAccount>({
+        authorizeUrl: async ({ flags }) => {
+            baseUrl = await resolveBaseUrl(flags)
+            return `${baseUrl}/oauth/authorize`
         },
-
-        async exchangeCode({ code, redirectUri, handshake }) {
-            const hs = asHandshake(handshake)
-            if (!hs.codeVerifier) {
-                throw new Error('Missing PKCE code verifier from authorize step.')
-            }
-
-            const params = new URLSearchParams({
-                grant_type: 'authorization_code',
-                client_id: hs.clientId,
-                redirect_uri: redirectUri,
-                code_verifier: hs.codeVerifier,
-                code,
-            })
-
-            const res = await fetchWithRetry({
-                url: `${hs.baseUrl}/oauth/token`,
-                options: {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: params.toString(),
-                },
-            })
-
-            const json = (await res.json().catch(() => ({}))) as {
-                access_token?: string
-                error?: string
-                error_description?: string
-                message?: string
-            }
-
-            if (!res.ok) {
-                const message =
-                    json.error_description || json.message || json.error || res.statusText
-                throw new Error(`OAuth token exchange failed: ${message}`)
-            }
-
-            if (!json.access_token) {
-                throw new Error('OAuth token exchange did not return an access token.')
-            }
-
-            return { accessToken: json.access_token }
+        tokenUrl: async ({ handshake }) => {
+            // `handshake.baseUrl` lets a caller scope refresh to a specific
+            // account's instance (status --user); otherwise the authorize-time
+            // value, then the default config.
+            const base =
+                baseUrl ?? (handshake.baseUrl as string | undefined) ?? (await getBaseUrl())
+            return `${base}/oauth/token`
         },
-
-        async validateToken({ token, handshake }) {
-            const hs = asHandshake(handshake)
+        // Prefer a handshake-scoped client id (account-aware refresh); else
+        // resolve from flag/config (only prompts when neither is set, so it's
+        // safe on the refresh path — the logged-in record carries one).
+        clientId: ({ handshake, flags }) => {
+            const fromHandshake = handshake.clientId
+            return typeof fromHandshake === 'string' && fromHandshake
+                ? fromHandshake
+                : resolveClientId(flags)
+        },
+        validate: async ({ token, handshake }) => {
+            const base = baseUrl ?? (await getBaseUrl())
             const { data } = await apiRequest<AuthInfoResponse>(
                 'auth.info',
                 {},
-                {
-                    token,
-                    baseUrl: hs.baseUrl,
-                },
+                { token, baseUrl: base },
             )
             return makeOutlineAccount({
                 id: data.user.id,
                 label: data.user.name,
-                baseUrl: hs.baseUrl,
-                oauthClientId: hs.clientId,
+                baseUrl: base,
+                oauthClientId: handshake.clientId as string,
                 teamName: data.team.name,
             })
         },
-    }
+        fetchImpl: outlineFetch,
+    })
 }
 
 /**
@@ -273,39 +236,68 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         const result = await ensureMigrated() // memoised
         return result === null || !migrationIsConclusive(result)
     }
-    return {
-        async active(ref?: AccountRef) {
-            if (ref === undefined) {
-                const envToken = process.env[TOKEN_ENV_VAR]?.trim()
-                if (envToken) {
-                    return {
-                        token: envToken,
-                        account: makeOutlineAccount({
-                            id: '',
-                            label: '',
-                            baseUrl: await getBaseUrl(),
-                        }),
-                    }
-                }
+    /**
+     * Shared env → v2 → legacy resolution for `active` / `activeBundle`.
+     * `fromV2` reads the matching cli-core method; `fromEnvOrLegacy` maps an
+     * env/legacy token into the caller's shape (env + legacy carry no refresh
+     * material, so the bundle form surfaces as access-only).
+     */
+    async function resolveAuth<T>(
+        ref: AccountRef | undefined,
+        fromV2: () => Promise<T | null>,
+        fromEnvOrLegacy: (token: string, account: OutlineAccount) => T,
+    ): Promise<T | null> {
+        if (ref === undefined) {
+            const envToken = process.env[TOKEN_ENV_VAR]?.trim()
+            if (envToken) {
+                return fromEnvOrLegacy(
+                    envToken,
+                    makeOutlineAccount({ id: '', label: '', baseUrl: await getBaseUrl() }),
+                )
             }
-            await ensureMigrated()
-            const fromStore = await inner.active(ref)
-            if (fromStore) return fromStore
+        }
+        await ensureMigrated()
+        const fromStore = await fromV2()
+        if (fromStore) return fromStore
+        const legacy = await readLegacyTokenSnapshot()
+        if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
+            return fromEnvOrLegacy(legacy.token, legacy.account)
+        }
+        return null
+    }
 
-            const legacy = await readLegacyTokenSnapshot()
-            if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
-                return legacy
-            }
-            return null
+    // `ensureMigrated` runs before the v2 write so the post-write discharge
+    // can't race a pending migration into re-grabbing the legacy token. The
+    // discharge is best-effort: a lingering `api_token` is dormant because
+    // reads hit v2 first. (`clear` needs the stricter propagating variant.)
+    async function writeThenDischargeLegacy(write: () => Promise<void>): Promise<void> {
+        await ensureMigrated()
+        await write()
+        if (await migrationIsInconclusive()) {
+            await dischargeLegacyState().catch(() => undefined)
+        }
+    }
+
+    return {
+        active(ref?: AccountRef) {
+            return resolveAuth(
+                ref,
+                () => inner.active(ref),
+                (token, account) => ({ token, account }),
+            )
         },
-        async set(account: OutlineAccount, token: string) {
-            await ensureMigrated()
-            await inner.set(account, token)
-            if (await migrationIsInconclusive()) {
-                // Best-effort: a lingering `api_token` is dormant because
-                // `active()` reads v2 first.
-                await dischargeLegacyState().catch(() => undefined)
-            }
+        activeBundle(ref?: AccountRef) {
+            return resolveAuth(
+                ref,
+                () => inner.activeBundle(ref),
+                (token, account) => ({ account, bundle: { accessToken: token } }),
+            )
+        },
+        set(account: OutlineAccount, token: string) {
+            return writeThenDischargeLegacy(() => inner.set(account, token))
+        },
+        setBundle(account: OutlineAccount, bundle: TokenBundle, options) {
+            return writeThenDischargeLegacy(() => inner.setBundle(account, bundle, options))
         },
         async clear(ref?: AccountRef) {
             await ensureMigrated()
