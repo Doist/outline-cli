@@ -10,7 +10,7 @@ npm run build         # compile TypeScript to dist/
 npm run dev           # watch mode (rebuild on changes)
 npm run type-check    # typecheck without emitting
 npm run test          # run all tests
-npx vitest run src/__tests__/output.test.ts  # run a single test file
+npx vitest run src/lib/output.test.ts  # run a single test file
 npm run format        # biome lint + format (auto-fix)
 ```
 
@@ -40,7 +40,7 @@ Each file in `src/commands/` exports a `registerXxxCommand(program)` function th
 
 ## Testing
 
-Vitest with module mocking. Tests live in `src/__tests__/`. Common patterns:
+Vitest with module mocking. Tests are colocated next to the source they cover (`foo.ts` → `foo.test.ts`); shared test fixtures live in `src/_fixtures/`. Common patterns:
 
 - Mock `apiRequest` with `vi.mock()`
 - Stub `fetch` globally for API tests

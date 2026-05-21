@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BaseCliError } from '../lib/errors.js'
-import {
-    formatError,
-    formatErrorJson,
-    getOutputOptions,
-    outputItem,
-    outputList,
-} from '../lib/output.js'
+import { BaseCliError } from './errors.js'
+import { formatError, formatErrorJson, getOutputOptions, outputItem, outputList } from './output.js'
 
 describe('output', () => {
     let logs: string[]

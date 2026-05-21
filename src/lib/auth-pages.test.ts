@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderError, renderSuccess } from '../lib/auth-pages.js'
+import { renderError, renderSuccess } from './auth-pages.js'
 
 describe('auth pages', () => {
     it('renderSuccess returns the branded post-login page', () => {

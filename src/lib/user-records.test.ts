@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { STORED_ACCOUNT } from './_fixtures/auth.js'
+import { STORED_ACCOUNT } from '../_fixtures/auth.js'
 
 const configMock = vi.hoisted(() => ({
     getConfig: vi.fn(),
     updateConfig: vi.fn(),
 }))
 
-vi.mock('../lib/config.js', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../lib/config.js')>()
+vi.mock('./config.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./config.js')>()
     return { ...actual, getConfig: configMock.getConfig, updateConfig: configMock.updateConfig }
 })
 
@@ -35,7 +35,7 @@ describe('createOutlineUserRecordStore', () => {
         configMock.getConfig.mockResolvedValue({
             users: [ADA, { ...GRACE, token: '  plaintext-token  ' }],
         })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         const records = await createOutlineUserRecordStore().list()
 
@@ -48,7 +48,7 @@ describe('createOutlineUserRecordStore', () => {
 
     it('upsert() appends a brand-new record', async () => {
         configMock.getConfig.mockResolvedValue({ users: [ADA] })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().upsert({
             account: {
@@ -75,7 +75,7 @@ describe('createOutlineUserRecordStore', () => {
         configMock.getConfig.mockResolvedValue({
             users: [{ ...ADA, token: 'stale-plaintext' }, GRACE],
         })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().upsert({ account: STORED_ACCOUNT })
 
@@ -86,7 +86,7 @@ describe('createOutlineUserRecordStore', () => {
 
     it('upsert() persists fallbackToken back to the StoredUser.token slot', async () => {
         configMock.getConfig.mockResolvedValue({ users: [] })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().upsert({
             account: STORED_ACCOUNT,
@@ -103,7 +103,7 @@ describe('createOutlineUserRecordStore', () => {
         // expiry), but the refresh token is a long-lived secret and must stay
         // in the secure store only — `fallbackRefreshToken` is dropped, never
         // written to config, even when cli-core supplies it (keyring offline).
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().upsert({
             account: STORED_ACCOUNT,
@@ -137,7 +137,7 @@ describe('createOutlineUserRecordStore', () => {
 
     it('remove() drops the matching record', async () => {
         configMock.getConfig.mockResolvedValue({ users: [ADA, GRACE] })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().remove('user-uuid')
 
@@ -149,7 +149,7 @@ describe('createOutlineUserRecordStore', () => {
             users: [ADA, GRACE],
             default_user_id: 'user-uuid',
         })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().remove('user-uuid')
 
@@ -161,7 +161,7 @@ describe('createOutlineUserRecordStore', () => {
 
     it('remove() is a no-op when the id is unknown (does not touch config)', async () => {
         configMock.getConfig.mockResolvedValue({ users: [ADA] })
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
 
         await createOutlineUserRecordStore().remove('nobody')
 
@@ -169,7 +169,7 @@ describe('createOutlineUserRecordStore', () => {
     })
 
     it('getDefaultId / setDefaultId round-trip via the default_user_id config field', async () => {
-        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+        const { createOutlineUserRecordStore } = await import('./user-records.js')
         const store = createOutlineUserRecordStore()
 
         configMock.getConfig.mockResolvedValueOnce({})
@@ -188,13 +188,13 @@ describe('createOutlineUserRecordStore', () => {
 
 describe('getDefaultUserRecord', () => {
     it('returns null when no users are stored', async () => {
-        const { getDefaultUserRecord } = await import('../lib/user-records.js')
+        const { getDefaultUserRecord } = await import('./user-records.js')
         expect(getDefaultUserRecord({})).toBeNull()
         expect(getDefaultUserRecord({ users: [] })).toBeNull()
     })
 
     it('returns the pinned default when default_user_id matches', async () => {
-        const { getDefaultUserRecord } = await import('../lib/user-records.js')
+        const { getDefaultUserRecord } = await import('./user-records.js')
         const record = getDefaultUserRecord({
             users: [ADA, GRACE],
             default_user_id: 'grace-uuid',
@@ -203,7 +203,7 @@ describe('getDefaultUserRecord', () => {
     })
 
     it('falls back to the first record when default_user_id is absent or stale', async () => {
-        const { getDefaultUserRecord } = await import('../lib/user-records.js')
+        const { getDefaultUserRecord } = await import('./user-records.js')
 
         const noDefault = getDefaultUserRecord({ users: [ADA, GRACE] })
         expect(noDefault?.account.id).toBe('user-uuid')

@@ -1,8 +1,8 @@
 import { Command } from 'commander'
 import { describe, expect, it } from 'vitest'
-import { registerChangelogCommand } from '../commands/changelog.js'
 import { BaseCliError } from '../lib/errors.js'
 import { formatError, formatErrorJson } from '../lib/output.js'
+import { registerChangelogCommand } from './changelog.js'
 
 describe('changelog command end-to-end', () => {
     it('rejects with BaseCliError(INVALID_TYPE) when --count is not a number', async () => {

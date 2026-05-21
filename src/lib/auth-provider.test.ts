@@ -7,16 +7,16 @@ import {
     okResponse,
     SKIPPED_RESULT,
     STORED_ACCOUNT,
-} from './_fixtures/auth.js'
+} from '../_fixtures/auth.js'
 
 vi.mock('../transport/fetch-with-retry.js', () => ({ fetchWithRetry: vi.fn() }))
-vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
+vi.mock('./api.js', () => ({ apiRequest: vi.fn() }))
 
 const migrateMocks = vi.hoisted(() => ({
     runMigrateLegacyAuth: vi.fn(),
 }))
 
-vi.mock('../lib/migrate-auth.js', () => migrateMocks)
+vi.mock('./migrate-auth.js', () => migrateMocks)
 
 const keyringMocks = vi.hoisted(() => ({
     createKeyringTokenStore: vi.fn(),
@@ -47,8 +47,8 @@ const configMocks = vi.hoisted(() => ({
     updateConfig: vi.fn(),
 }))
 
-vi.mock('../lib/config.js', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../lib/config.js')>()
+vi.mock('./config.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./config.js')>()
     return {
         ...actual,
         getConfigPath: () => '/home/user/.config/outline-cli/config.json',
@@ -61,10 +61,10 @@ const TOKEN_ENV_VAR = 'OUTLINE_API_TOKEN'
 
 /** Reset the module-level migration memo for each test by re-importing. */
 async function loadCreateOutlineTokenStore(): Promise<
-    typeof import('../lib/auth-provider.js').createOutlineTokenStore
+    typeof import('./auth-provider.js').createOutlineTokenStore
 > {
     vi.resetModules()
-    const mod = await import('../lib/auth-provider.js')
+    const mod = await import('./auth-provider.js')
     return mod.createOutlineTokenStore
 }
 
@@ -77,7 +77,7 @@ describe('createOutlineAuthProvider', () => {
     })
 
     it('authorize builds an outline /oauth/authorize URL with PKCE params from flags', async () => {
-        const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
+        const { createOutlineAuthProvider } = await import('./auth-provider.js')
         const result = await createOutlineAuthProvider().authorize({
             redirectUri: 'http://localhost:54969/callback',
             state: 'state-123',
@@ -109,7 +109,7 @@ describe('createOutlineAuthProvider', () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         vi.mocked(fetchWithRetry).mockResolvedValueOnce(okResponse({ access_token: 'tok-abc' }))
 
-        const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
+        const { createOutlineAuthProvider } = await import('./auth-provider.js')
         const provider = createOutlineAuthProvider()
         const handshake = {
             baseUrl: 'https://wiki.example.com',
@@ -150,10 +150,10 @@ describe('createOutlineAuthProvider', () => {
     })
 
     it('validateToken builds an OutlineAccount using the base URL captured at authorize', async () => {
-        const { apiRequest } = await import('../lib/api.js')
+        const { apiRequest } = await import('./api.js')
         vi.mocked(apiRequest).mockResolvedValue({ data: AUTH_INFO })
 
-        const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
+        const { createOutlineAuthProvider } = await import('./auth-provider.js')
         const provider = createOutlineAuthProvider()
         // authorize seeds the provider's base-URL closure (from the flag),
         // which validate then reuses instead of a handshake field.
@@ -210,7 +210,7 @@ describe('createOutlineAuthProvider', () => {
             }),
         )
 
-        const { createOutlineAuthProvider } = await import('../lib/auth-provider.js')
+        const { createOutlineAuthProvider } = await import('./auth-provider.js')
         const result = await createOutlineAuthProvider().refreshToken?.({
             refreshToken: 'r-old',
             handshake: {},
@@ -262,7 +262,7 @@ describe('createOutlineTokenStore', () => {
         const options = keyringMocks.createKeyringTokenStore.mock.calls[0][0]
         expect(options.serviceName).toBe('outline-cli')
         expect(options.recordsLocation).toBe('/home/user/.config/outline-cli/config.json')
-        const { matchOutlineAccount } = await import('../lib/auth-provider.js')
+        const { matchOutlineAccount } = await import('./auth-provider.js')
         expect(options.matchAccount).toBe(matchOutlineAccount)
     })
 
@@ -497,7 +497,7 @@ describe('createOutlineTokenStore', () => {
 
 describe('matchOutlineAccount', () => {
     it('matches the UUID exactly and the label case-insensitively', async () => {
-        const { matchOutlineAccount } = await import('../lib/auth-provider.js')
+        const { matchOutlineAccount } = await import('./auth-provider.js')
         expect(matchOutlineAccount(STORED_ACCOUNT, 'user-uuid')).toBe(true)
         expect(matchOutlineAccount(STORED_ACCOUNT, 'ADA')).toBe(true)
         expect(matchOutlineAccount(STORED_ACCOUNT, 'ada')).toBe(true)
@@ -518,7 +518,7 @@ describe('getActiveTokenSource', () => {
     })
 
     it('reports the storage location of the active token, mirroring active()s resolution order', async () => {
-        const { getActiveTokenSource } = await import('../lib/auth-provider.js')
+        const { getActiveTokenSource } = await import('./auth-provider.js')
 
         vi.stubEnv(TOKEN_ENV_VAR, 'tk')
         configMocks.getConfig.mockResolvedValue({})

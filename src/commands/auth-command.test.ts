@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AUTH_INFO } from './_fixtures/auth.js'
+import { AUTH_INFO } from '../_fixtures/auth.js'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
@@ -48,7 +48,7 @@ async function captureAttachOptions() {
     const { attachLoginCommand } = await import('@doist/cli-core/auth')
     const login = new Command('login')
     vi.mocked(attachLoginCommand).mockReturnValue(login)
-    const { registerAuthCommand } = await import('../commands/auth.js')
+    const { registerAuthCommand } = await import('./auth.js')
     const program = new Command()
     program.exitOverride()
     registerAuthCommand(program)
@@ -245,7 +245,7 @@ describe('logTokenStorageResult', () => {
 
     it('prints the secure-store confirmation to stdout in human mode', async () => {
         const { logs, errs } = captureStreams()
-        const { logTokenStorageResult } = await import('../commands/auth.js')
+        const { logTokenStorageResult } = await import('./auth.js')
 
         logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', false)
 
@@ -255,7 +255,7 @@ describe('logTokenStorageResult', () => {
 
     it('suppresses the stdout confirmation in machine-output mode', async () => {
         const { logs } = captureStreams()
-        const { logTokenStorageResult } = await import('../commands/auth.js')
+        const { logTokenStorageResult } = await import('./auth.js')
 
         logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', true)
 
@@ -264,7 +264,7 @@ describe('logTokenStorageResult', () => {
 
     it('routes the keyring-fallback warning to stderr (in both human and machine modes)', async () => {
         const { logs, errs } = captureStreams()
-        const { logTokenStorageResult } = await import('../commands/auth.js')
+        const { logTokenStorageResult } = await import('./auth.js')
 
         logTokenStorageResult(
             { storage: 'config-file', warning: 'system credential manager unavailable' },

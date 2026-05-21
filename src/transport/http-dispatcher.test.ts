@@ -40,7 +40,7 @@ describe('http-dispatcher', () => {
     })
 
     afterEach(async () => {
-        const { resetDefaultDispatcherForTests } = await import('../transport/http-dispatcher.js')
+        const { resetDefaultDispatcherForTests } = await import('./http-dispatcher.js')
         await resetDefaultDispatcherForTests()
         restoreProxyEnv()
         vi.restoreAllMocks()
@@ -48,27 +48,27 @@ describe('http-dispatcher', () => {
     })
 
     it('returns a direct Agent when no proxy env vars are set', async () => {
-        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
+        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
 
         expect(getDefaultDispatcher()).toBeInstanceOf(Agent)
     })
 
     it('returns an EnvHttpProxyAgent when proxy env vars are set', async () => {
         process.env.HTTPS_PROXY = 'http://proxy.local:8080'
-        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
+        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
 
         expect(getDefaultDispatcher()).toBeInstanceOf(EnvHttpProxyAgent)
     })
 
     it('caches the dispatcher instance', async () => {
-        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
+        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
 
         expect(getDefaultDispatcher()).toBe(getDefaultDispatcher())
     })
 
     it('reset lets tests re-evaluate env-dependent transport selection', async () => {
         const { getDefaultDispatcher, resetDefaultDispatcherForTests } =
-            await import('../transport/http-dispatcher.js')
+            await import('./http-dispatcher.js')
         const directDispatcher = getDefaultDispatcher()
 
         process.env.HTTPS_PROXY = 'http://proxy.local:8080'
@@ -98,7 +98,7 @@ describe('http-dispatcher', () => {
 
         try {
             const { port } = httpServer.address() as AddressInfo
-            const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
+            const { getDefaultDispatcher } = await import('./http-dispatcher.js')
             const dispatcher = getDefaultDispatcher()
             const response = await fetch(`http://127.0.0.1:${port}/`, {
                 // @ts-expect-error - dispatcher is a valid Node fetch option not in TS lib types
@@ -117,7 +117,7 @@ describe('http-dispatcher', () => {
 
 describe('suppressExperimentalWarningsSync', () => {
     it('swallows ExperimentalWarning emissions during the synchronous call', async () => {
-        const { suppressExperimentalWarningsSync } = await import('../transport/http-dispatcher.js')
+        const { suppressExperimentalWarningsSync } = await import('./http-dispatcher.js')
 
         const calls: unknown[][] = []
         const originalEmit = process.emitWarning
@@ -142,7 +142,7 @@ describe('suppressExperimentalWarningsSync', () => {
     })
 
     it('restores the original emitWarning even if the callback throws', async () => {
-        const { suppressExperimentalWarningsSync } = await import('../transport/http-dispatcher.js')
+        const { suppressExperimentalWarningsSync } = await import('./http-dispatcher.js')
 
         const originalEmit = process.emitWarning
         const placeholder = (() => {}) as typeof process.emitWarning
@@ -161,14 +161,14 @@ describe('suppressExperimentalWarningsSync', () => {
     })
 
     it('returns the callback result', async () => {
-        const { suppressExperimentalWarningsSync } = await import('../transport/http-dispatcher.js')
+        const { suppressExperimentalWarningsSync } = await import('./http-dispatcher.js')
 
         const result = suppressExperimentalWarningsSync(() => 42)
         expect(result).toBe(42)
     })
 
     it('throws if the callback returns a thenable (sync-only contract)', async () => {
-        const { suppressExperimentalWarningsSync } = await import('../transport/http-dispatcher.js')
+        const { suppressExperimentalWarningsSync } = await import('./http-dispatcher.js')
 
         // Cast through `unknown` — the public type rejects async callbacks at
         // compile time; this exercises the runtime defence-in-depth.
@@ -180,7 +180,7 @@ describe('suppressExperimentalWarningsSync', () => {
 
 describe('http-dispatcher integration with decompress interceptor', () => {
     afterEach(async () => {
-        const { resetDefaultDispatcherForTests } = await import('../transport/http-dispatcher.js')
+        const { resetDefaultDispatcherForTests } = await import('./http-dispatcher.js')
         await resetDefaultDispatcherForTests()
         vi.doUnmock('undici')
         vi.resetModules()
@@ -209,7 +209,7 @@ describe('http-dispatcher integration with decompress interceptor', () => {
             }
         })
 
-        const { getDefaultDispatcher } = await import('../transport/http-dispatcher.js')
+        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
         const dispatcher = getDefaultDispatcher()
         expect(dispatcher).toBeDefined()
 

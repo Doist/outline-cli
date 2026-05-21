@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import packageJson from '../../package.json' with { type: 'json' }
+import packageJson from '../../../package.json' with { type: 'json' }
 
 const registerCoreUpdateCommandMock = vi.fn()
 const withSpinnerMock = vi.fn((_opts: unknown, fn: () => Promise<unknown>) => fn())
@@ -9,11 +9,11 @@ vi.mock('@doist/cli-core/commands', () => ({
     registerUpdateCommand: registerCoreUpdateCommandMock,
 }))
 
-vi.mock('../lib/config.js', () => ({
+vi.mock('../../lib/config.js', () => ({
     getConfigPath: () => '/tmp/outline-cli-test/config.json',
 }))
 
-vi.mock('../lib/spinner.js', () => ({
+vi.mock('../../lib/spinner.js', () => ({
     withSpinner: withSpinnerMock,
 }))
 
@@ -27,7 +27,7 @@ describe('ol update wiring', () => {
     })
 
     it('forwards packageName, currentVersion, configPath, changelogCommandName, withSpinner', async () => {
-        const { registerUpdateCommand } = await import('../commands/update/index.js')
+        const { registerUpdateCommand } = await import('./index.js')
         const program = new Command()
         registerUpdateCommand(program)
 

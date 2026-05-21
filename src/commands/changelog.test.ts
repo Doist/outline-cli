@@ -11,7 +11,7 @@ vi.mock('@doist/cli-core/commands', () => ({
 }))
 
 import packageJson from '../../package.json' with { type: 'json' }
-import { registerChangelogCommand } from '../commands/changelog.js'
+import { registerChangelogCommand } from './changelog.js'
 
 describe('changelog wrapper', () => {
     beforeEach(() => {

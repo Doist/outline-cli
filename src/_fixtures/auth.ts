@@ -1,5 +1,5 @@
 import type { MigrateAuthResult } from '@doist/cli-core/auth'
-import type { OutlineAccount } from '../../lib/outline-account.js'
+import type { OutlineAccount } from '../lib/outline-account.js'
 
 /** Canonical persisted `OutlineAccount` used across auth tests. */
 export const STORED_ACCOUNT: OutlineAccount = {

@@ -17,7 +17,7 @@ vi.mock('../lib/api.js', () => ({
 describeEmptyMachineOutput('ol document list', {
     setup: () => {},
     run: async (extraArgs) => {
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)

@@ -45,7 +45,7 @@ describe('search command', () => {
             pagination: { offset: 0, limit: 25 },
         })
 
-        const { registerSearchCommand } = await import('../commands/search.js')
+        const { registerSearchCommand } = await import('./search.js')
         const program = new Command()
         program.exitOverride()
         registerSearchCommand(program)
@@ -75,7 +75,7 @@ describe('search command', () => {
             ],
         })
 
-        const { registerSearchCommand } = await import('../commands/search.js')
+        const { registerSearchCommand } = await import('./search.js')
         const program = new Command()
         program.exitOverride()
         registerSearchCommand(program)
@@ -114,7 +114,7 @@ describe('document commands', () => {
             },
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -133,7 +133,7 @@ describe('document commands', () => {
             pagination: { offset: 0, limit: 10 },
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -186,7 +186,7 @@ describe('document commands', () => {
             return Promise.reject(new Error(`Unexpected endpoint: ${endpoint}`))
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -218,7 +218,7 @@ describe('document commands', () => {
             errors.push(args.join(' '))
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -263,7 +263,7 @@ describe('document commands', () => {
             return Promise.reject(new Error(`Unexpected endpoint: ${endpoint}`))
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -294,7 +294,7 @@ describe('document commands', () => {
             errors.push(args.join(' '))
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -326,7 +326,7 @@ describe('document commands', () => {
             errors.push(args.join(' '))
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -366,7 +366,7 @@ describe('document commands', () => {
             errors.push(args.join(' '))
         })
 
-        const { registerDocumentCommand } = await import('../commands/document.js')
+        const { registerDocumentCommand } = await import('./document.js')
         const program = new Command()
         program.exitOverride()
         registerDocumentCommand(program)
@@ -408,7 +408,7 @@ describe('collection commands', () => {
             data: [{ id: 'c1', name: 'Engineering', documentCount: 42 }],
         })
 
-        const { registerCollectionCommand } = await import('../commands/collection.js')
+        const { registerCollectionCommand } = await import('./collection.js')
         const program = new Command()
         program.exitOverride()
         registerCollectionCommand(program)
