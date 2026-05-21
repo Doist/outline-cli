@@ -118,10 +118,12 @@ describe('auth status subcommand', () => {
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'status'])
 
+        // status routes through the managed request path (no token override)
+        // so an expired-but-refreshable token is rotated before the check.
         expect(apiRequest).toHaveBeenCalledWith(
             'auth.info',
             {},
-            { token: 'env-token', baseUrl: 'https://test.outline.com' },
+            { baseUrl: 'https://test.outline.com' },
         )
         expect(logs.some((l) => l.includes('Authenticated'))).toBe(true)
         expect(logs.some((l) => l.includes('Team:') && l.includes('Analytics'))).toBe(true)

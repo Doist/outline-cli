@@ -1,12 +1,13 @@
 import { createInterface } from 'node:readline/promises'
 import {
     type AccountRef,
+    type ActiveBundleSnapshot,
     type AuthProvider,
     createKeyringTokenStore,
-    deriveChallenge,
-    generateVerifier,
+    createPkceProvider,
     type KeyringTokenStore,
     type MigrateAuthResult,
+    type TokenBundle,
 } from '@doist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
@@ -25,16 +26,6 @@ export type AuthInfoResponse = {
 }
 
 export type OutlineTokenStore = KeyringTokenStore<OutlineAccount>
-
-type OutlineHandshake = Record<string, unknown> & {
-    baseUrl: string
-    clientId: string
-    codeVerifier?: string
-}
-
-function asHandshake(value: Record<string, unknown>): OutlineHandshake {
-    return value as OutlineHandshake
-}
 
 function stringFlag(flags: Record<string, unknown>, key: string): string | undefined {
     const value = flags[key]
@@ -75,88 +66,52 @@ async function resolveClientId(flags: Record<string, unknown>): Promise<string> 
     return answered
 }
 
+/**
+ * Routes cli-core's OAuth HTTP through outline's transport so the proxy /
+ * decompression dispatcher applies — to the token exchange AND the
+ * oauth4webapi refresh grant (cli-core threads this into oauth4webapi's
+ * `customFetch`), which would otherwise capture the bare global `fetch`.
+ */
+const outlineFetch: typeof fetch = (input, init) =>
+    fetchWithRetry({ url: input as RequestInfo | URL, options: init ?? {} })
+
 export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
-    return {
-        async authorize({ redirectUri, state, flags }) {
-            const baseUrl = await resolveBaseUrl(flags)
-            const clientId = await resolveClientId(flags)
-            const codeVerifier = generateVerifier()
-            const codeChallenge = deriveChallenge(codeVerifier)
-
-            const url = new URL(`${baseUrl}/oauth/authorize`)
-            url.searchParams.set('client_id', clientId)
-            url.searchParams.set('response_type', 'code')
-            url.searchParams.set('code_challenge', codeChallenge)
-            url.searchParams.set('code_challenge_method', 'S256')
-            url.searchParams.set('redirect_uri', redirectUri)
-            url.searchParams.set('state', state)
-
-            const handshake: OutlineHandshake = { baseUrl, clientId, codeVerifier }
-            return { authorizeUrl: url.toString(), handshake }
+    // Captured at `authorize` (which may prompt for it) and reused by
+    // `exchangeCode` / `validate` so a single login can't double-prompt. A
+    // provider built only for silent refresh never runs `authorize`, so this
+    // stays undefined there and `tokenUrl` falls back to stored config — the
+    // refresh path must never prompt.
+    let baseUrl: string | undefined
+    return createPkceProvider<OutlineAccount>({
+        authorizeUrl: async ({ flags }) => {
+            baseUrl = await resolveBaseUrl(flags)
+            return `${baseUrl}/oauth/authorize`
         },
-
-        async exchangeCode({ code, redirectUri, handshake }) {
-            const hs = asHandshake(handshake)
-            if (!hs.codeVerifier) {
-                throw new Error('Missing PKCE code verifier from authorize step.')
-            }
-
-            const params = new URLSearchParams({
-                grant_type: 'authorization_code',
-                client_id: hs.clientId,
-                redirect_uri: redirectUri,
-                code_verifier: hs.codeVerifier,
-                code,
-            })
-
-            const res = await fetchWithRetry({
-                url: `${hs.baseUrl}/oauth/token`,
-                options: {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: params.toString(),
-                },
-            })
-
-            const json = (await res.json().catch(() => ({}))) as {
-                access_token?: string
-                error?: string
-                error_description?: string
-                message?: string
-            }
-
-            if (!res.ok) {
-                const message =
-                    json.error_description || json.message || json.error || res.statusText
-                throw new Error(`OAuth token exchange failed: ${message}`)
-            }
-
-            if (!json.access_token) {
-                throw new Error('OAuth token exchange did not return an access token.')
-            }
-
-            return { accessToken: json.access_token }
+        tokenUrl: async ({ handshake }) => {
+            const base =
+                baseUrl ?? (handshake.baseUrl as string | undefined) ?? (await getBaseUrl())
+            return `${base}/oauth/token`
         },
-
-        async validateToken({ token, handshake }) {
-            const hs = asHandshake(handshake)
+        // `resolveClientId` only prompts when there's no flag AND no stored id,
+        // so it's safe on the refresh path (the logged-in record carries one).
+        clientId: ({ flags }) => resolveClientId(flags),
+        validate: async ({ token, handshake }) => {
+            const base = baseUrl ?? (await getBaseUrl())
             const { data } = await apiRequest<AuthInfoResponse>(
                 'auth.info',
                 {},
-                {
-                    token,
-                    baseUrl: hs.baseUrl,
-                },
+                { token, baseUrl: base },
             )
             return makeOutlineAccount({
                 id: data.user.id,
                 label: data.user.name,
-                baseUrl: hs.baseUrl,
-                oauthClientId: hs.clientId,
+                baseUrl: base,
+                oauthClientId: handshake.clientId as string,
                 teamName: data.team.name,
             })
         },
-    }
+        fetchImpl: outlineFetch,
+    })
 }
 
 /**
@@ -298,12 +253,46 @@ export function createOutlineTokenStore(): OutlineTokenStore {
             }
             return null
         },
+        async activeBundle(ref?: AccountRef): Promise<ActiveBundleSnapshot<OutlineAccount> | null> {
+            // Env and legacy tokens carry no refresh material, so they surface
+            // as access-only bundles — the refresh helper then reports
+            // `AUTH_REFRESH_UNAVAILABLE`, which is the correct answer for them.
+            if (ref === undefined) {
+                const envToken = process.env[TOKEN_ENV_VAR]?.trim()
+                if (envToken) {
+                    return {
+                        account: makeOutlineAccount({
+                            id: '',
+                            label: '',
+                            baseUrl: await getBaseUrl(),
+                        }),
+                        bundle: { accessToken: envToken },
+                    }
+                }
+            }
+            await ensureMigrated()
+            const fromStore = await inner.activeBundle(ref)
+            if (fromStore) return fromStore
+
+            const legacy = await readLegacyTokenSnapshot()
+            if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
+                return { account: legacy.account, bundle: { accessToken: legacy.token } }
+            }
+            return null
+        },
         async set(account: OutlineAccount, token: string) {
             await ensureMigrated()
             await inner.set(account, token)
             if (await migrationIsInconclusive()) {
                 // Best-effort: a lingering `api_token` is dormant because
                 // `active()` reads v2 first.
+                await dischargeLegacyState().catch(() => undefined)
+            }
+        },
+        async setBundle(account: OutlineAccount, bundle: TokenBundle, options) {
+            await ensureMigrated()
+            await inner.setBundle(account, bundle, options)
+            if (await migrationIsInconclusive()) {
                 await dischargeLegacyState().catch(() => undefined)
             }
         },

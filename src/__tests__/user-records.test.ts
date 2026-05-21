@@ -98,6 +98,41 @@ describe('createOutlineUserRecordStore', () => {
         })
     })
 
+    it('round-trips the bundle metadata (expiry + refresh flag + refresh fallback)', async () => {
+        // Regression: these fields were dropped by the StoredUser mapping, so
+        // proactive refresh never knew the token's expiry and a keyring-down
+        // refresh token was lost.
+        const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
+
+        await createOutlineUserRecordStore().upsert({
+            account: STORED_ACCOUNT,
+            accessTokenExpiresAt: 1_700_000_000_000,
+            refreshTokenExpiresAt: 1_800_000_000_000,
+            hasRefreshToken: true,
+            fallbackRefreshToken: 'plain-refresh',
+        })
+
+        const stored = {
+            ...ADA,
+            refresh_token: 'plain-refresh',
+            access_token_expires_at: 1_700_000_000_000,
+            refresh_token_expires_at: 1_800_000_000_000,
+            has_refresh_token: true,
+        }
+        expect(configMock.updateConfig).toHaveBeenCalledWith({ users: [stored] })
+
+        // ...and back out through list()
+        configMock.getConfig.mockResolvedValue({ users: [stored] })
+        const [record] = await createOutlineUserRecordStore().list()
+        expect(record).toEqual({
+            account: STORED_ACCOUNT,
+            accessTokenExpiresAt: 1_700_000_000_000,
+            refreshTokenExpiresAt: 1_800_000_000_000,
+            hasRefreshToken: true,
+            fallbackRefreshToken: 'plain-refresh',
+        })
+    })
+
     it('remove() drops the matching record', async () => {
         configMock.getConfig.mockResolvedValue({ users: [ADA, GRACE] })
         const { createOutlineUserRecordStore } = await import('../lib/user-records.js')

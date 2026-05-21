@@ -1,5 +1,6 @@
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
-import { getApiToken, getBaseUrl } from './auth.js'
+import { TOKEN_ENV_VAR } from './auth-constants.js'
+import { getApiToken, getBaseUrl, proactiveRefresh, reactiveRefresh } from './auth.js'
 import { type SpinnerOptions, withSpinner } from './spinner.js'
 
 /**
@@ -60,22 +61,37 @@ async function rawApiRequest<T>(
     body: object = {},
     overrides: ApiRequestOverrides = {},
 ): Promise<PaginatedResult<T>> {
-    const [resolvedBaseUrl, resolvedToken] = await Promise.all([
-        overrides.baseUrl ? Promise.resolve(overrides.baseUrl.replace(/\/$/, '')) : getBaseUrl(),
-        overrides.token ? Promise.resolve(overrides.token) : getApiToken(),
-    ])
+    // Only stored credentials can be refreshed: a caller-supplied token
+    // override or the `OUTLINE_API_TOKEN` env var is taken as-is.
+    const managed = !overrides.token && !process.env[TOKEN_ENV_VAR]?.trim()
 
-    const res = await fetchWithRetry({
-        url: `${resolvedBaseUrl}/api/${path}`,
-        options: {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${resolvedToken}`,
+    if (managed) await proactiveRefresh()
+
+    const resolvedBaseUrl = overrides.baseUrl
+        ? overrides.baseUrl.replace(/\/$/, '')
+        : await getBaseUrl()
+
+    const performRequest = (token: string) =>
+        fetchWithRetry({
+            url: `${resolvedBaseUrl}/api/${path}`,
+            options: {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(body),
             },
-            body: JSON.stringify(body),
-        },
-    })
+        })
+
+    let res = await performRequest(overrides.token ?? (await getApiToken()))
+
+    // Reactive path: a 401 on a managed token triggers a forced rotation and
+    // a single retry. `reactiveRefresh` throws `NoTokenError` when the refresh
+    // token is gone, so an unrecoverable 401 surfaces the re-login hint.
+    if (res.status === 401 && managed && (await reactiveRefresh())) {
+        res = await performRequest(await getApiToken())
+    }
 
     if (!res.ok) {
         let message = `API error: ${res.status} ${res.statusText}`

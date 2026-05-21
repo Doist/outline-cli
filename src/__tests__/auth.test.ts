@@ -123,4 +123,35 @@ describe('auth', () => {
         const { getOAuthClientId } = await import('../lib/auth.js')
         await expect(getOAuthClientId()).resolves.toBe('cid-record')
     })
+
+    it('reactiveRefresh maps an unrefreshable token to NoTokenError (prompts re-login)', async () => {
+        // A stored access token with no refresh token can't be rotated, so the
+        // real refreshAccessToken throws AUTH_REFRESH_UNAVAILABLE — which the
+        // helper surfaces as a re-login prompt rather than a raw refresh error.
+        writeFileSync(
+            TEST_CONFIG_PATH,
+            JSON.stringify({
+                config_version: 2,
+                users: [
+                    {
+                        id: 'u',
+                        name: 'Ada',
+                        base_url: 'https://wiki.example.com',
+                        oauth_client_id: 'cid',
+                        token: 'plain-access',
+                    },
+                ],
+                default_user_id: 'u',
+            }),
+        )
+        const { reactiveRefresh } = await import('../lib/auth.js')
+
+        let caught: unknown
+        try {
+            await reactiveRefresh()
+        } catch (e) {
+            caught = e
+        }
+        expect((caught as { code?: string }).code).toBe('NO_TOKEN')
+    })
 })

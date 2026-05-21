@@ -1,11 +1,12 @@
-import { SecureStoreUnavailableError } from '@doist/cli-core/auth'
+import { refreshAccessToken, SecureStoreUnavailableError } from '@doist/cli-core/auth'
 import { TOKEN_ENV_VAR } from './auth-constants.js'
 import {
+    createOutlineAuthProvider,
     createOutlineTokenStore,
     getActiveTokenSource,
     type OutlineTokenStore,
 } from './auth-provider.js'
-import { getConfig } from './config.js'
+import { getConfig, getConfigPath } from './config.js'
 import { CliError } from './errors.js'
 import { DEFAULT_BASE_URL } from './outline-account.js'
 import { getDefaultUserRecord } from './user-records.js'
@@ -33,6 +34,62 @@ let storeSingleton: OutlineTokenStore | undefined
 function tokenStore(): OutlineTokenStore {
     if (!storeSingleton) storeSingleton = createOutlineTokenStore()
     return storeSingleton
+}
+
+let providerSingleton: ReturnType<typeof createOutlineAuthProvider> | undefined
+function authProvider(): ReturnType<typeof createOutlineAuthProvider> {
+    if (!providerSingleton) providerSingleton = createOutlineAuthProvider()
+    return providerSingleton
+}
+
+// Caller-provided O_EXCL lock so concurrent `ol` invocations don't issue
+// parallel refresh grants. Resolved per-call (not cached) to honour test
+// config-path mocking, mirroring `getConfigPath`.
+function refreshLockPath(): string {
+    return `${getConfigPath()}.refresh.lock`
+}
+
+/**
+ * Best-effort proactive rotation before a request. Swallows every failure —
+ * the request and its 401 path are authoritative, so a transient or
+ * not-refreshable outcome here must not block an otherwise-valid token.
+ */
+export async function proactiveRefresh(): Promise<void> {
+    try {
+        await refreshAccessToken({
+            store: tokenStore(),
+            provider: authProvider(),
+            lockPath: refreshLockPath(),
+        })
+    } catch {
+        // reactive 401 path owns the authoritative outcome
+    }
+}
+
+/**
+ * Reactive rotation after a 401. Returns `true` when the token rotated (the
+ * caller retries once). A rejected/absent refresh token surfaces as
+ * `NoTokenError` (re-login); a transient failure propagates unchanged.
+ */
+export async function reactiveRefresh(): Promise<boolean> {
+    try {
+        const result = await refreshAccessToken({
+            store: tokenStore(),
+            provider: authProvider(),
+            lockPath: refreshLockPath(),
+            force: true,
+        })
+        return result.rotated
+    } catch (err) {
+        // Match on the structural `.code` rather than `instanceof`: cli-core
+        // throws its own CliError, and class identity isn't reliable across
+        // package boundaries (duplicate module instances under linking).
+        const code = (err as { code?: unknown } | null)?.code
+        if (code === 'AUTH_REFRESH_EXPIRED' || code === 'AUTH_REFRESH_UNAVAILABLE') {
+            throw new NoTokenError()
+        }
+        throw err
+    }
 }
 
 /**

@@ -104,14 +104,17 @@ export function registerAuthCommand(program: Command): void {
     attachStatusCommand<OutlineAccount>(auth, {
         store,
         description: 'Show current authentication state',
-        async fetchLive({ token, account }) {
+        async fetchLive({ account }) {
             try {
                 const [{ data: info }, source] = await Promise.all([
-                    apiRequest<AuthInfoResponse>(
-                        'auth.info',
-                        {},
-                        { token, baseUrl: account.baseUrl },
-                    ),
+                    // No token override → the managed request path, so an
+                    // expired-but-refreshable token is rotated before the
+                    // check rather than reported as expired. (Outline access
+                    // tokens last ~an hour; without this, `auth status` can't
+                    // self-heal even though normal commands do.) A `--user`
+                    // targeting a non-default account resolves the default
+                    // here — multi-account status is a separate concern.
+                    apiRequest<AuthInfoResponse>('auth.info', {}, { baseUrl: account.baseUrl }),
                     getActiveTokenSource(),
                 ])
                 statusData = { email: info.user.email, source }
