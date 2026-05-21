@@ -8,6 +8,9 @@ vi.mock('../lib/auth.js', () => ({
     getOAuthClientId: async () => undefined,
     getActiveTokenSource: async () =>
         process.env.OUTLINE_API_TOKEN ? ('env' as const) : ('secure-store' as const),
+    // status resolves the live token for the selected account via this; echo
+    // the snapshot token back (no refresh in these command-surface tests).
+    refreshedTokenForStatus: async (_account: unknown, fallback: string) => fallback,
 }))
 
 vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
@@ -118,12 +121,12 @@ describe('auth status subcommand', () => {
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'status'])
 
-        // status routes through the managed request path (no token override)
-        // so an expired-but-refreshable token is rotated before the check.
+        // status probes auth.info with the (account-scoped) live token resolved
+        // for the selected account.
         expect(apiRequest).toHaveBeenCalledWith(
             'auth.info',
             {},
-            { baseUrl: 'https://test.outline.com' },
+            { token: 'env-token', baseUrl: 'https://test.outline.com' },
         )
         expect(logs.some((l) => l.includes('Authenticated'))).toBe(true)
         expect(logs.some((l) => l.includes('Team:') && l.includes('Analytics'))).toBe(true)

@@ -8,7 +8,7 @@ import {
 } from './auth-provider.js'
 import { getConfig, getConfigPath } from './config.js'
 import { CliError } from './errors.js'
-import { DEFAULT_BASE_URL } from './outline-account.js'
+import { DEFAULT_BASE_URL, type OutlineAccount } from './outline-account.js'
 import { getDefaultUserRecord } from './user-records.js'
 
 export { SecureStoreUnavailableError, getActiveTokenSource, TOKEN_ENV_VAR }
@@ -50,19 +50,48 @@ function refreshLockPath(): string {
 }
 
 /**
- * Best-effort proactive rotation before a request. Swallows every failure —
- * the request and its 401 path are authoritative, so a transient or
- * not-refreshable outcome here must not block an otherwise-valid token.
+ * Best-effort proactive rotation before a request. Returns the token to use
+ * (the rotated one, or the current one if no rotation was needed) so the
+ * caller doesn't re-read the store; `undefined` when the default account
+ * isn't refreshable (no refresh token / env / failure) — the caller then
+ * falls back to `getApiToken()` and the 401 path stays authoritative.
  */
-export async function proactiveRefresh(): Promise<void> {
+export async function proactiveRefresh(): Promise<string | undefined> {
     try {
-        await refreshAccessToken({
+        const { bundle } = await refreshAccessToken({
             store: tokenStore(),
             provider: authProvider(),
             lockPath: refreshLockPath(),
         })
+        return bundle.accessToken
     } catch {
-        // reactive 401 path owns the authoritative outcome
+        return undefined
+    }
+}
+
+/**
+ * Refresh the *selected* account (not the default) for `auth status`, returning
+ * its current-or-rotated token. Scoped via the account's id + base URL/client
+ * id through the refresh handshake, so `--user <other>` checks and rotates the
+ * right account at the right instance. Env / legacy / record-less accounts
+ * aren't refreshable — the snapshot `fallback` token is returned as-is.
+ */
+export async function refreshedTokenForStatus(
+    account: OutlineAccount,
+    fallback: string,
+): Promise<string> {
+    if (process.env[TOKEN_ENV_VAR]?.trim() || !account.id) return fallback
+    try {
+        const { bundle } = await refreshAccessToken({
+            store: tokenStore(),
+            provider: authProvider(),
+            lockPath: refreshLockPath(),
+            ref: account.id,
+            handshake: { baseUrl: account.baseUrl, clientId: account.oauthClientId },
+        })
+        return bundle.accessToken
+    } catch {
+        return fallback
     }
 }
 

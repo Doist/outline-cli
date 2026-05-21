@@ -54,6 +54,21 @@ export type ApiRequestOverrides = {
 }
 
 /**
+ * Resolve the token for a request. A caller-supplied override is used as-is.
+ * On the managed path, prefer the token `proactiveRefresh` resolved (rotated
+ * or current) so unrefreshable/access-only accounts stay on a single store
+ * read; only fall back to `getApiToken` when proactive refresh bows out.
+ */
+async function resolveRequestToken(managed: boolean, override?: string): Promise<string> {
+    if (override) return override
+    if (managed) {
+        const refreshed = await proactiveRefresh()
+        if (refreshed) return refreshed
+    }
+    return getApiToken()
+}
+
+/**
  * Core API request function without spinner wrapping.
  */
 async function rawApiRequest<T>(
@@ -65,11 +80,11 @@ async function rawApiRequest<T>(
     // override or the `OUTLINE_API_TOKEN` env var is taken as-is.
     const managed = !overrides.token && !process.env[TOKEN_ENV_VAR]?.trim()
 
-    if (managed) await proactiveRefresh()
-
-    const resolvedBaseUrl = overrides.baseUrl
-        ? overrides.baseUrl.replace(/\/$/, '')
-        : await getBaseUrl()
+    // Resolve the base URL and the (proactively refreshed) token in parallel.
+    const [resolvedBaseUrl, resolvedToken] = await Promise.all([
+        overrides.baseUrl ? Promise.resolve(overrides.baseUrl.replace(/\/$/, '')) : getBaseUrl(),
+        resolveRequestToken(managed, overrides.token),
+    ])
 
     const performRequest = (token: string) =>
         fetchWithRetry({
@@ -84,7 +99,7 @@ async function rawApiRequest<T>(
             },
         })
 
-    let res = await performRequest(overrides.token ?? (await getApiToken()))
+    let res = await performRequest(resolvedToken)
 
     // Reactive path: a 401 on a managed token triggers a forced rotation and
     // a single retry. `reactiveRefresh` throws `NoTokenError` when the refresh

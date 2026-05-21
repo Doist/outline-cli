@@ -98,10 +98,11 @@ describe('createOutlineUserRecordStore', () => {
         })
     })
 
-    it('round-trips the bundle metadata (expiry + refresh flag + refresh fallback)', async () => {
-        // Regression: these fields were dropped by the StoredUser mapping, so
-        // proactive refresh never knew the token's expiry and a keyring-down
-        // refresh token was lost.
+    it('round-trips expiry + refresh flag, but never persists the refresh token in plaintext', async () => {
+        // The expiry/flag metadata must round-trip (proactive refresh needs the
+        // expiry), but the refresh token is a long-lived secret and must stay
+        // in the secure store only — `fallbackRefreshToken` is dropped, never
+        // written to config, even when cli-core supplies it (keyring offline).
         const { createOutlineUserRecordStore } = await import('../lib/user-records.js')
 
         await createOutlineUserRecordStore().upsert({
@@ -114,14 +115,15 @@ describe('createOutlineUserRecordStore', () => {
 
         const stored = {
             ...ADA,
-            refresh_token: 'plain-refresh',
             access_token_expires_at: 1_700_000_000_000,
             refresh_token_expires_at: 1_800_000_000_000,
             has_refresh_token: true,
         }
-        expect(configMock.updateConfig).toHaveBeenCalledWith({ users: [stored] })
+        const [[written]] = configMock.updateConfig.mock.calls
+        expect(written).toEqual({ users: [stored] })
+        expect(written.users[0]).not.toHaveProperty('refresh_token')
 
-        // ...and back out through list()
+        // ...and back out through list() — still no refresh material.
         configMock.getConfig.mockResolvedValue({ users: [stored] })
         const [record] = await createOutlineUserRecordStore().list()
         expect(record).toEqual({
@@ -129,8 +131,8 @@ describe('createOutlineUserRecordStore', () => {
             accessTokenExpiresAt: 1_700_000_000_000,
             refreshTokenExpiresAt: 1_800_000_000_000,
             hasRefreshToken: true,
-            fallbackRefreshToken: 'plain-refresh',
         })
+        expect(record.fallbackRefreshToken).toBeUndefined()
     })
 
     it('remove() drops the matching record', async () => {

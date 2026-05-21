@@ -67,8 +67,6 @@ function toRecord(user: StoredUser): UserRecord<OutlineAccount> {
     const record: UserRecord<OutlineAccount> = { account }
     const token = user.token?.trim()
     if (token) record.fallbackToken = token
-    const refresh = user.refresh_token?.trim()
-    if (refresh) record.fallbackRefreshToken = refresh
     if (user.access_token_expires_at !== undefined) {
         record.accessTokenExpiresAt = user.access_token_expires_at
     }
@@ -91,8 +89,11 @@ function fromRecord(record: UserRecord<OutlineAccount>): StoredUser {
     if (record.account.teamName) next.team_name = record.account.teamName
     const token = record.fallbackToken?.trim()
     if (token) next.token = token
-    const refresh = record.fallbackRefreshToken?.trim()
-    if (refresh) next.refresh_token = refresh
+    // Deliberately NOT persisting `fallbackRefreshToken`: the refresh token is
+    // a long-lived credential and must stay in the secure store only. If the
+    // keyring is offline at write time, the refresh token isn't persisted, so
+    // that account fails closed (re-auth on next expiry) rather than leaving a
+    // long-lived secret in plaintext config. (Doist secrets-management standard.)
     if (record.accessTokenExpiresAt !== undefined) {
         next.access_token_expires_at = record.accessTokenExpiresAt
     }

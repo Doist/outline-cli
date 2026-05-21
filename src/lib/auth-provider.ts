@@ -1,7 +1,6 @@
 import { createInterface } from 'node:readline/promises'
 import {
     type AccountRef,
-    type ActiveBundleSnapshot,
     type AuthProvider,
     createKeyringTokenStore,
     createPkceProvider,
@@ -88,13 +87,22 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
             return `${baseUrl}/oauth/authorize`
         },
         tokenUrl: async ({ handshake }) => {
+            // `handshake.baseUrl` lets a caller scope refresh to a specific
+            // account's instance (status --user); otherwise the authorize-time
+            // value, then the default config.
             const base =
                 baseUrl ?? (handshake.baseUrl as string | undefined) ?? (await getBaseUrl())
             return `${base}/oauth/token`
         },
-        // `resolveClientId` only prompts when there's no flag AND no stored id,
-        // so it's safe on the refresh path (the logged-in record carries one).
-        clientId: ({ flags }) => resolveClientId(flags),
+        // Prefer a handshake-scoped client id (account-aware refresh); else
+        // resolve from flag/config (only prompts when neither is set, so it's
+        // safe on the refresh path — the logged-in record carries one).
+        clientId: ({ handshake, flags }) => {
+            const fromHandshake = handshake.clientId
+            return typeof fromHandshake === 'string' && fromHandshake
+                ? fromHandshake
+                : resolveClientId(flags)
+        },
         validate: async ({ token, handshake }) => {
             const base = baseUrl ?? (await getBaseUrl())
             const { data } = await apiRequest<AuthInfoResponse>(
@@ -228,73 +236,68 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         const result = await ensureMigrated() // memoised
         return result === null || !migrationIsConclusive(result)
     }
+    /**
+     * Shared env → v2 → legacy resolution for `active` / `activeBundle`.
+     * `fromV2` reads the matching cli-core method; `fromEnvOrLegacy` maps an
+     * env/legacy token into the caller's shape (env + legacy carry no refresh
+     * material, so the bundle form surfaces as access-only).
+     */
+    async function resolveAuth<T>(
+        ref: AccountRef | undefined,
+        fromV2: () => Promise<T | null>,
+        fromEnvOrLegacy: (token: string, account: OutlineAccount) => T,
+    ): Promise<T | null> {
+        if (ref === undefined) {
+            const envToken = process.env[TOKEN_ENV_VAR]?.trim()
+            if (envToken) {
+                return fromEnvOrLegacy(
+                    envToken,
+                    makeOutlineAccount({ id: '', label: '', baseUrl: await getBaseUrl() }),
+                )
+            }
+        }
+        await ensureMigrated()
+        const fromStore = await fromV2()
+        if (fromStore) return fromStore
+        const legacy = await readLegacyTokenSnapshot()
+        if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
+            return fromEnvOrLegacy(legacy.token, legacy.account)
+        }
+        return null
+    }
+
+    // `ensureMigrated` runs before the v2 write so the post-write discharge
+    // can't race a pending migration into re-grabbing the legacy token. The
+    // discharge is best-effort: a lingering `api_token` is dormant because
+    // reads hit v2 first. (`clear` needs the stricter propagating variant.)
+    async function writeThenDischargeLegacy(write: () => Promise<void>): Promise<void> {
+        await ensureMigrated()
+        await write()
+        if (await migrationIsInconclusive()) {
+            await dischargeLegacyState().catch(() => undefined)
+        }
+    }
+
     return {
-        async active(ref?: AccountRef) {
-            if (ref === undefined) {
-                const envToken = process.env[TOKEN_ENV_VAR]?.trim()
-                if (envToken) {
-                    return {
-                        token: envToken,
-                        account: makeOutlineAccount({
-                            id: '',
-                            label: '',
-                            baseUrl: await getBaseUrl(),
-                        }),
-                    }
-                }
-            }
-            await ensureMigrated()
-            const fromStore = await inner.active(ref)
-            if (fromStore) return fromStore
-
-            const legacy = await readLegacyTokenSnapshot()
-            if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
-                return legacy
-            }
-            return null
+        active(ref?: AccountRef) {
+            return resolveAuth(
+                ref,
+                () => inner.active(ref),
+                (token, account) => ({ token, account }),
+            )
         },
-        async activeBundle(ref?: AccountRef): Promise<ActiveBundleSnapshot<OutlineAccount> | null> {
-            // Env and legacy tokens carry no refresh material, so they surface
-            // as access-only bundles — the refresh helper then reports
-            // `AUTH_REFRESH_UNAVAILABLE`, which is the correct answer for them.
-            if (ref === undefined) {
-                const envToken = process.env[TOKEN_ENV_VAR]?.trim()
-                if (envToken) {
-                    return {
-                        account: makeOutlineAccount({
-                            id: '',
-                            label: '',
-                            baseUrl: await getBaseUrl(),
-                        }),
-                        bundle: { accessToken: envToken },
-                    }
-                }
-            }
-            await ensureMigrated()
-            const fromStore = await inner.activeBundle(ref)
-            if (fromStore) return fromStore
-
-            const legacy = await readLegacyTokenSnapshot()
-            if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
-                return { account: legacy.account, bundle: { accessToken: legacy.token } }
-            }
-            return null
+        activeBundle(ref?: AccountRef) {
+            return resolveAuth(
+                ref,
+                () => inner.activeBundle(ref),
+                (token, account) => ({ account, bundle: { accessToken: token } }),
+            )
         },
-        async set(account: OutlineAccount, token: string) {
-            await ensureMigrated()
-            await inner.set(account, token)
-            if (await migrationIsInconclusive()) {
-                // Best-effort: a lingering `api_token` is dormant because
-                // `active()` reads v2 first.
-                await dischargeLegacyState().catch(() => undefined)
-            }
+        set(account: OutlineAccount, token: string) {
+            return writeThenDischargeLegacy(() => inner.set(account, token))
         },
-        async setBundle(account: OutlineAccount, bundle: TokenBundle, options) {
-            await ensureMigrated()
-            await inner.setBundle(account, bundle, options)
-            if (await migrationIsInconclusive()) {
-                await dischargeLegacyState().catch(() => undefined)
-            }
+        setBundle(account: OutlineAccount, bundle: TokenBundle, options) {
+            return writeThenDischargeLegacy(() => inner.setBundle(account, bundle, options))
         },
         async clear(ref?: AccountRef) {
             await ensureMigrated()

@@ -120,6 +120,22 @@ describe('apiRequest', () => {
         expect(retryHeaders.Authorization).toBe('Bearer rotated-token')
     })
 
+    it('proactively refreshes a managed token and uses the rotated token (no extra store read)', async () => {
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const f = fetchWithRetry as ReturnType<typeof vi.fn>
+        f.mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
+        authMocks.proactiveRefresh.mockResolvedValueOnce('rotated-proactive')
+
+        const { apiRequest } = await import('../lib/api.js')
+        await apiRequest('documents.list')
+
+        expect(authMocks.proactiveRefresh).toHaveBeenCalledTimes(1)
+        // The proactive token is reused — no fallback read of getApiToken.
+        expect(authMocks.getApiToken).not.toHaveBeenCalled()
+        const headers = f.mock.calls[0][0].options.headers as Record<string, string>
+        expect(headers.Authorization).toBe('Bearer rotated-proactive')
+    })
+
     it('does not refresh when OUTLINE_API_TOKEN is set (unmanaged token)', async () => {
         vi.stubEnv('OUTLINE_API_TOKEN', 'env-tok')
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')

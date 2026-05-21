@@ -16,6 +16,7 @@ import {
     type OutlineAccount,
     type OutlineTokenStore,
 } from '../lib/auth-provider.js'
+import { refreshedTokenForStatus } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
@@ -104,17 +105,21 @@ export function registerAuthCommand(program: Command): void {
     attachStatusCommand<OutlineAccount>(auth, {
         store,
         description: 'Show current authentication state',
-        async fetchLive({ account }) {
+        async fetchLive({ account, token }) {
             try {
+                // Refresh the *selected* account before the check (scoped via
+                // its id + base URL/client id), then probe with the rotated
+                // token. Outline access tokens last ~an hour; without this
+                // `auth status` can't self-heal even though normal commands
+                // do. Passing the resolved token keeps the check tied to the
+                // requested account rather than the default.
+                const liveToken = await refreshedTokenForStatus(account, token)
                 const [{ data: info }, source] = await Promise.all([
-                    // No token override → the managed request path, so an
-                    // expired-but-refreshable token is rotated before the
-                    // check rather than reported as expired. (Outline access
-                    // tokens last ~an hour; without this, `auth status` can't
-                    // self-heal even though normal commands do.) A `--user`
-                    // targeting a non-default account resolves the default
-                    // here — multi-account status is a separate concern.
-                    apiRequest<AuthInfoResponse>('auth.info', {}, { baseUrl: account.baseUrl }),
+                    apiRequest<AuthInfoResponse>(
+                        'auth.info',
+                        {},
+                        { token: liveToken, baseUrl: account.baseUrl },
+                    ),
                     getActiveTokenSource(),
                 ])
                 statusData = { email: info.user.email, source }

@@ -200,6 +200,7 @@ describe('createOutlineAuthProvider', () => {
             default_user_id: 'user-uuid',
         })
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        vi.mocked(fetchWithRetry).mockClear() // isolate this test's POST from earlier ones
         vi.mocked(fetchWithRetry).mockResolvedValue(
             Response.json({
                 access_token: 'tok-new',
@@ -220,6 +221,14 @@ describe('createOutlineAuthProvider', () => {
         const called = vi.mocked(fetchWithRetry).mock.calls[0][0]
         const calledUrl = called.url instanceof Request ? called.url.url : String(called.url)
         expect(calledUrl).toBe('https://wiki.example.com/oauth/token')
+
+        // Public-client form body: a regression to confidential-client refresh
+        // (sending a client_secret) must fail here.
+        const body = new URLSearchParams(called.options?.body as string)
+        expect(body.get('grant_type')).toBe('refresh_token')
+        expect(body.get('refresh_token')).toBe('r-old')
+        expect(body.get('client_id')).toBe('cid-xyz')
+        expect(body.has('client_secret')).toBe(false)
     })
 })
 

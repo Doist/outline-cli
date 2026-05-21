@@ -21,8 +21,6 @@ export type StoredUser = {
     team_name?: string
     /** Plaintext access-token fallback, present only when the keyring was unavailable at write time. */
     token?: string
-    /** Plaintext refresh-token fallback, same lifecycle as `token`. */
-    refresh_token?: string
     /** Access-token expiry (unix-epoch ms); drives proactive refresh. */
     access_token_expires_at?: number
     /** Refresh-token expiry (unix-epoch ms), when the server returns one. */
