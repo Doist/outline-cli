@@ -286,6 +286,13 @@ export function createOutlineTokenStore(): OutlineTokenStore {
                 (token, account) => ({ token, account }),
             )
         },
+        activeAccount(ref?: AccountRef) {
+            return resolveAuth(
+                ref,
+                () => inner.activeAccount(ref),
+                (_token, account) => ({ account, isDefault: true }),
+            )
+        },
         activeBundle(ref?: AccountRef) {
             return resolveAuth(
                 ref,
@@ -301,12 +308,13 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         },
         async clear(ref?: AccountRef) {
             await ensureMigrated()
-            await inner.clear(ref)
+            const cleared = await inner.clear(ref)
             if (await migrationIsInconclusive()) {
                 // Must succeed: v2 is now empty, so a surviving legacy
                 // token would shadow the logout via the fallback.
                 await dischargeLegacyState()
             }
+            return cleared
         },
         async list() {
             await ensureMigrated()
