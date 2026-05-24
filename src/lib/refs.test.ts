@@ -10,6 +10,16 @@ vi.mock('./api.js', () => ({
     apiRequest: (...args: unknown[]) => mockApiRequest(...args),
 }))
 
+const ENG_PRODUCT_DOCS = [
+    { id: '1', title: 'Engineering Guide', urlId: 'eng-1' },
+    { id: '2', title: 'Product Docs', urlId: 'prod-2' },
+]
+
+const ENG_PRODUCT_COLLECTIONS = [
+    { id: '1', name: 'Engineering' },
+    { id: '2', name: 'Product' },
+]
+
 describe('resolveDocumentRef', () => {
     beforeEach(() => {
         vi.resetModules()
@@ -68,10 +78,7 @@ describe('resolveDocumentRef', () => {
     })
 
     it('resolves document by exact name match (case-insensitive)', async () => {
-        const mockDocs = [
-            { id: '1', title: 'Engineering Guide', urlId: 'eng-1' },
-            { id: '2', title: 'Product Docs', urlId: 'prod-2' },
-        ]
+        const mockDocs = ENG_PRODUCT_DOCS
         // "engineering guide" has spaces, doesn't look like an ID
         mockApiRequest.mockResolvedValueOnce({ data: mockDocs })
 
@@ -82,10 +89,7 @@ describe('resolveDocumentRef', () => {
     })
 
     it('resolves document by partial name match when unique', async () => {
-        const mockDocs = [
-            { id: '1', title: 'Engineering Guide', urlId: 'eng-1' },
-            { id: '2', title: 'Product Docs', urlId: 'prod-2' },
-        ]
+        const mockDocs = ENG_PRODUCT_DOCS
         // "product" is 7 chars, looks like an ID, so will try ID lookup first
         mockApiRequest
             .mockRejectedValueOnce(new Error('Not found')) // ID lookup fails
@@ -163,10 +167,7 @@ describe('resolveDocumentRef', () => {
     })
 
     it('falls back to name search when ID lookup fails', async () => {
-        const mockDocs = [
-            { id: '1', title: 'Engineering Guide', urlId: 'eng-1' },
-            { id: '2', title: 'Product Docs', urlId: 'prod-2' },
-        ]
+        const mockDocs = ENG_PRODUCT_DOCS
         // "abc123" looks like an ID, but fails, then falls back to name search
         mockApiRequest
             .mockRejectedValueOnce(new Error('Not found'))
@@ -244,10 +245,7 @@ describe('resolveCollectionRef', () => {
     })
 
     it('resolves collection by exact name match', async () => {
-        const mockCols = [
-            { id: '1', name: 'Engineering' },
-            { id: '2', name: 'Product' },
-        ]
+        const mockCols = ENG_PRODUCT_COLLECTIONS
         // "Engineering" is 11 chars, looks like an ID
         mockApiRequest
             .mockRejectedValueOnce(new Error('Not found'))
@@ -260,10 +258,7 @@ describe('resolveCollectionRef', () => {
     })
 
     it('resolves collection by partial name match when unique', async () => {
-        const mockCols = [
-            { id: '1', name: 'Engineering' },
-            { id: '2', name: 'Product' },
-        ]
+        const mockCols = ENG_PRODUCT_COLLECTIONS
         // "prod" is 4 chars, doesn't look like an ID (needs 6+)
         mockApiRequest.mockResolvedValueOnce({ data: mockCols })
 

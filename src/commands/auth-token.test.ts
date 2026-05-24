@@ -1,7 +1,8 @@
 import { captureConsole, captureStream, createTestProgram } from '@doist/cli-core/testing'
 import type { Command } from 'commander'
-import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_INFO, STORED_ACCOUNT, STORED_ACCOUNT_BOB } from '../_fixtures/auth.js'
+import { linesText } from '../_fixtures/testing.js'
 import type { CliError } from '../lib/errors.js'
 
 // `auth token` save drives the raw store's `set` + `getLastStorageResult`;
@@ -26,10 +27,6 @@ vi.mock('../lib/auth-provider.js', async (importOriginal) => {
 })
 
 vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
-
-function lines(spy: MockInstance): string {
-    return spy.mock.calls.map((args) => args.join(' ')).join('\n')
-}
 
 async function buildProgram(): Promise<Command> {
     const { registerAuthCommand } = await import('./auth.js')
@@ -94,7 +91,7 @@ describe('auth token (save)', () => {
             },
             'tok-paste',
         )
-        expect(lines(log)).toContain('Saved token for Ada Lovelace (Analytics)')
+        expect(linesText(log)).toContain('Saved token for Ada Lovelace (Analytics)')
     })
 
     it('collapses any auth.info failure into a leak-free AUTH_VERIFICATION_FAILED', async () => {
@@ -173,7 +170,7 @@ describe('auth token (save)', () => {
         ])
 
         expect(storeMocks.set).toHaveBeenCalled()
-        expect(lines(log)).toEqual('')
+        expect(linesText(log)).toEqual('')
     })
 })
 

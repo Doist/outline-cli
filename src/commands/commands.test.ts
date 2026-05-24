@@ -1,22 +1,12 @@
 import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { lines, mockOutlineAuthModule, mockProcessExit } from '../_fixtures/testing.js'
 
-vi.mock('../lib/auth.js', () => ({
-    getApiToken: async () => 'test-token',
-    getBaseUrl: async () => 'https://test.outline.com',
-    getOAuthClientId: async () => undefined,
-    getTokenSource: async () => 'config' as const,
-    clearConfig: vi.fn(),
-}))
+vi.mock('../lib/auth.js', () => mockOutlineAuthModule())
 
 vi.mock('../lib/api.js', () => ({
     apiRequest: vi.fn(),
 }))
-
-/** Read a `captureConsole` spy's recorded calls as joined lines. */
-function lines(spy: MockInstance): string[] {
-    return spy.mock.calls.map((args) => args.join(' '))
-}
 
 describe('search command', () => {
     let log: MockInstance
@@ -199,9 +189,7 @@ describe('document commands', () => {
     })
 
     it('document create with both --collection and --parent errors', async () => {
-        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
-            throw new Error(`process.exit(${code})`)
-        })
+        const mockExit = mockProcessExit()
         const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
@@ -268,9 +256,7 @@ describe('document commands', () => {
     })
 
     it('document move with both --collection and --parent errors', async () => {
-        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
-            throw new Error(`process.exit(${code})`)
-        })
+        const mockExit = mockProcessExit()
         const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
@@ -295,9 +281,7 @@ describe('document commands', () => {
     })
 
     it('document move without --collection or --parent errors', async () => {
-        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
-            throw new Error(`process.exit(${code})`)
-        })
+        const mockExit = mockProcessExit()
         const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
@@ -330,9 +314,7 @@ describe('document commands', () => {
             return Promise.reject(new Error(`Unexpected endpoint: ${endpoint}`))
         })
 
-        const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
-            throw new Error(`process.exit(${code})`)
-        })
+        const mockExit = mockProcessExit()
         const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')

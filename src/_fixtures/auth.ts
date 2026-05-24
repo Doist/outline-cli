@@ -1,5 +1,5 @@
 import type { MigrateAuthResult } from '@doist/cli-core/auth'
-import type { Config } from '../lib/config.js'
+import type { Config, StoredUser } from '../lib/config.js'
 import type { OutlineAccount } from '../lib/outline-account.js'
 
 /** Canonical persisted `OutlineAccount` used across auth tests. */
@@ -9,6 +9,15 @@ export const STORED_ACCOUNT: OutlineAccount = {
     baseUrl: 'https://wiki.example.com',
     oauthClientId: 'cid-xyz',
     teamName: 'Analytics',
+}
+
+/** Snake-case `StoredUser` twin of {@link STORED_ACCOUNT}, derived so the two can't drift. */
+export const STORED_USER_ADA: StoredUser = {
+    id: STORED_ACCOUNT.id,
+    name: STORED_ACCOUNT.label,
+    base_url: STORED_ACCOUNT.baseUrl,
+    oauth_client_id: STORED_ACCOUNT.oauthClientId,
+    team_name: STORED_ACCOUNT.teamName,
 }
 
 /** Secondary persisted `OutlineAccount` on a different instance — for multi-account tests. */

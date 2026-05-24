@@ -3,35 +3,9 @@ import type { AddressInfo } from 'node:net'
 import { gzipSync } from 'node:zlib'
 import { Agent, EnvHttpProxyAgent } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureProxyEnv, clearProxyEnv, restoreProxyEnv } from '../_fixtures/proxy-env.js'
 
-const PROXY_ENV_KEYS = [
-    'HTTP_PROXY',
-    'http_proxy',
-    'HTTPS_PROXY',
-    'https_proxy',
-    'NO_PROXY',
-    'no_proxy',
-] as const
-
-const originalProxyEnv = new Map(PROXY_ENV_KEYS.map((key) => [key, process.env[key]]))
-
-function clearProxyEnv(): void {
-    for (const key of PROXY_ENV_KEYS) {
-        delete process.env[key]
-    }
-}
-
-function restoreProxyEnv(): void {
-    for (const key of PROXY_ENV_KEYS) {
-        const value = originalProxyEnv.get(key)
-        if (value === undefined) {
-            delete process.env[key]
-            continue
-        }
-
-        process.env[key] = value
-    }
-}
+const originalProxyEnv = captureProxyEnv()
 
 describe('http-dispatcher', () => {
     beforeEach(() => {
@@ -42,7 +16,7 @@ describe('http-dispatcher', () => {
     afterEach(async () => {
         const { resetDefaultDispatcherForTests } = await import('./http-dispatcher.js')
         await resetDefaultDispatcherForTests()
-        restoreProxyEnv()
+        restoreProxyEnv(originalProxyEnv)
         vi.restoreAllMocks()
         vi.resetModules()
     })
