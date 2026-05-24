@@ -2,6 +2,7 @@ import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import type { Command } from 'commander'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STORED_ACCOUNT, STORED_ACCOUNT_BOB } from '../_fixtures/auth.js'
+import { linesText } from '../_fixtures/testing.js'
 import { CliError } from '../lib/errors.js'
 
 // `account` consumes two auth-provider exports: the token store (list/use/remove
@@ -24,10 +25,6 @@ vi.mock('../lib/auth-provider.js', async (importOriginal) => {
         resolveActiveAccountSource: resolveMock,
     }
 })
-
-function lines(spy: MockInstance): string {
-    return spy.mock.calls.map((args) => args.join(' ')).join('\n')
-}
 
 async function buildProgram(): Promise<Command> {
     const { registerAccountCommand } = await import('./account.js')
@@ -61,7 +58,7 @@ describe('account command', () => {
             ])
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'list'])
-            const out = lines(logSpy)
+            const out = linesText(logSpy)
             expect(out).toContain('Ada')
             expect(out).toContain('Bob')
             expect(out).toContain(`id:${STORED_ACCOUNT.id}`)
@@ -72,14 +69,14 @@ describe('account command', () => {
             storeMocks.list.mockResolvedValue([])
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'list'])
-            expect(lines(logSpy)).toMatch(/No stored accounts/)
+            expect(linesText(logSpy)).toMatch(/No stored accounts/)
         })
 
         it('runs by default when no subcommand is given (ol account)', async () => {
             storeMocks.list.mockResolvedValue([{ account: STORED_ACCOUNT, isDefault: true }])
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account'])
-            expect(lines(logSpy)).toContain('Ada')
+            expect(linesText(logSpy)).toContain('Ada')
         })
 
         it('emits a {accounts, default} envelope under --json', async () => {
@@ -89,7 +86,7 @@ describe('account command', () => {
             ])
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'list', '--json'])
-            const payload = JSON.parse(lines(logSpy))
+            const payload = JSON.parse(linesText(logSpy))
             expect(payload.default).toBe(STORED_ACCOUNT.id)
             expect(payload.accounts).toHaveLength(2)
             expect(payload.accounts[0]).toMatchObject({ id: STORED_ACCOUNT.id, isDefault: true })
@@ -104,7 +101,7 @@ describe('account command', () => {
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'use', STORED_ACCOUNT_BOB.id])
             expect(storeMocks.setDefault).toHaveBeenCalledWith(STORED_ACCOUNT_BOB.id)
-            expect(lines(logSpy)).toContain(`Default account set to ${STORED_ACCOUNT_BOB.id}`)
+            expect(linesText(logSpy)).toContain(`Default account set to ${STORED_ACCOUNT_BOB.id}`)
         })
 
         it('propagates ACCOUNT_NOT_FOUND from setDefault for an unknown ref', async () => {
@@ -125,14 +122,14 @@ describe('account command', () => {
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'remove', 'bob'])
             expect(storeMocks.clear).toHaveBeenCalledWith('bob')
-            expect(lines(logSpy)).toContain('Removed Bob')
+            expect(linesText(logSpy)).toContain('Removed Bob')
         })
 
         it('notes a cleared default when removing the default account', async () => {
             storeMocks.clear.mockResolvedValue({ account: STORED_ACCOUNT, wasDefault: true })
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'remove', STORED_ACCOUNT.id])
-            const out = lines(logSpy)
+            const out = linesText(logSpy)
             expect(out).toContain('Removed Ada')
             expect(out).toMatch(/Cleared default account/)
         })
@@ -153,7 +150,7 @@ describe('account command', () => {
             })
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'remove', STORED_ACCOUNT.id])
-            expect(lines(errSpy)).toContain('OS keyring unavailable')
+            expect(linesText(errSpy)).toContain('OS keyring unavailable')
         })
     })
 
@@ -166,7 +163,7 @@ describe('account command', () => {
             })
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'current'])
-            const out = lines(logSpy)
+            const out = linesText(logSpy)
             expect(out).toContain('Ada')
             expect(out).toContain(STORED_ACCOUNT.baseUrl)
         })
@@ -179,7 +176,7 @@ describe('account command', () => {
             })
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'current', '--json'])
-            const payload = JSON.parse(lines(logSpy))
+            const payload = JSON.parse(linesText(logSpy))
             expect(payload.source).toBe('stored')
             expect(payload.account).toMatchObject({ id: STORED_ACCOUNT.id, isDefault: true })
             expect(payload.account).not.toHaveProperty('oauthClientId')
@@ -198,7 +195,7 @@ describe('account command', () => {
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'current'])
             expect(resolveMock).toHaveBeenCalledWith('Bob')
-            const out = lines(logSpy)
+            const out = linesText(logSpy)
             expect(out).toContain('Bob')
             expect(out).not.toContain('OUTLINE_API_TOKEN')
         })
@@ -206,25 +203,25 @@ describe('account command', () => {
         it('reports the env-token source (human + --json)', async () => {
             resolveMock.mockResolvedValue({ source: 'env' })
             await (await buildProgram()).parseAsync(['node', 'ol', 'account', 'current'])
-            expect(lines(logSpy)).toContain('OUTLINE_API_TOKEN')
+            expect(linesText(logSpy)).toContain('OUTLINE_API_TOKEN')
 
             logSpy.mockClear()
             resolveMock.mockResolvedValue({ source: 'env' })
             await (await buildProgram()).parseAsync(['node', 'ol', 'account', 'current', '--json'])
-            expect(JSON.parse(lines(logSpy))).toEqual({ source: 'env' })
+            expect(JSON.parse(linesText(logSpy))).toEqual({ source: 'env' })
         })
 
         it('reports the legacy source (human + --json)', async () => {
             resolveMock.mockResolvedValue({ source: 'legacy' })
             await (await buildProgram()).parseAsync(['node', 'ol', 'account', 'current'])
-            expect(lines(logSpy)).toMatch(/legacy single-user credentials/)
+            expect(linesText(logSpy)).toMatch(/legacy single-user credentials/)
 
             logSpy.mockClear()
             resolveMock.mockResolvedValue({ source: 'legacy' })
             await (
                 await buildProgram()
             ).parseAsync(['node', 'ol', 'account', 'current', '--ndjson'])
-            expect(JSON.parse(lines(logSpy))).toEqual({ source: 'legacy' })
+            expect(JSON.parse(linesText(logSpy))).toEqual({ source: 'legacy' })
         })
 
         it('throws NOT_AUTHENTICATED when nothing is active', async () => {

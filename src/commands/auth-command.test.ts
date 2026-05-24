@@ -1,7 +1,8 @@
 import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import { Command } from 'commander'
-import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_INFO, TWO_USER_CONFIG } from '../_fixtures/auth.js'
+import { lines } from '../_fixtures/testing.js'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
@@ -31,14 +32,6 @@ vi.mock('@doist/cli-core/auth', async () => ({
     ...(await vi.importActual<typeof import('@doist/cli-core/auth')>('@doist/cli-core/auth')),
     attachLoginCommand: vi.fn(),
 }))
-
-/**
- * Read a `captureConsole` spy's recorded calls as joined lines, matching how
- * chalk's styled fragments arrive (one console call → one space-joined line).
- */
-function lines(spy: MockInstance): string[] {
-    return spy.mock.calls.map((args) => args.join(' '))
-}
 
 async function captureAttachOptions() {
     const { attachLoginCommand } = await import('@doist/cli-core/auth')

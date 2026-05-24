@@ -1,11 +1,11 @@
 import { captureConsole } from '@doist/cli-core/testing'
 import { type MockInstance, beforeEach, describe, expect, it } from 'vitest'
+import { lines } from '../_fixtures/testing.js'
 import { BaseCliError } from './errors.js'
 import { formatError, formatErrorJson, getOutputOptions, outputItem, outputList } from './output.js'
 
 describe('output', () => {
     let log: MockInstance
-    const lines = () => log.mock.calls.map((args) => args.join(' '))
 
     beforeEach(() => {
         log = captureConsole()
@@ -17,24 +17,24 @@ describe('output', () => {
 
     it('outputItem human mode', () => {
         outputItem(item, formatter, keys)
-        expect(lines()[0]).toBe('Test (1)')
+        expect(lines(log)[0]).toBe('Test (1)')
     })
 
     it('outputItem json mode shows essential keys only', () => {
         outputItem(item, formatter, keys, { json: true })
-        const parsed = JSON.parse(lines()[0])
+        const parsed = JSON.parse(lines(log)[0])
         expect(parsed).toEqual({ id: '1', name: 'Test' })
     })
 
     it('outputItem json full mode shows all keys', () => {
         outputItem(item, formatter, keys, { json: true, full: true })
-        const parsed = JSON.parse(lines()[0])
+        const parsed = JSON.parse(lines(log)[0])
         expect(parsed).toEqual({ id: '1', name: 'Test', extra: 'hidden' })
     })
 
     it('outputList ndjson mode', () => {
         outputList([item, { ...item, id: '2' }], formatter, keys, { ndjson: true })
-        const records = lines()
+        const records = lines(log)
             .flatMap((line) => line.split('\n'))
             .filter(Boolean)
             .map((line) => JSON.parse(line))
