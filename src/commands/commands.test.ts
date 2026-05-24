@@ -13,9 +13,13 @@ vi.mock('../lib/api.js', () => ({
     apiRequest: vi.fn(),
 }))
 
+/** Read a `captureConsole` spy's recorded calls as joined lines. */
+function lines(spy: MockInstance): string[] {
+    return spy.mock.calls.map((args) => args.join(' '))
+}
+
 describe('search command', () => {
     let log: MockInstance
-    const lines = () => log.mock.calls.map((args) => args.join(' '))
 
     beforeEach(() => {
         log = captureConsole()
@@ -76,14 +80,13 @@ describe('search command', () => {
 
         await program.parseAsync(['node', 'ol', 'search', 'test', '--json'])
 
-        const parsed = JSON.parse(lines()[0])
+        const parsed = JSON.parse(lines(log)[0])
         expect(parsed[0].document.title).toBe('Test')
     })
 })
 
 describe('document commands', () => {
     let log: MockInstance
-    const lines = () => log.mock.calls.map((args) => args.join(' '))
 
     beforeEach(() => {
         log = captureConsole()
@@ -112,8 +115,8 @@ describe('document commands', () => {
         await program.parseAsync(['node', 'ol', 'document', 'get', 'my-doc-abc123'])
 
         expect(apiRequest).toHaveBeenCalledWith('documents.info', { id: 'abc123' })
-        expect(lines()[0]).toContain('My Doc')
-        expect(lines()[0]).toContain('Hello world')
+        expect(lines(log)[0]).toContain('My Doc')
+        expect(lines(log)[0]).toContain('Hello world')
     })
 
     it('document list passes pagination options', async () => {
@@ -219,7 +222,7 @@ describe('document commands', () => {
             ]),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errorSpy.mock.calls.flat().join(' ')).toContain('mutually exclusive')
+        expect(lines(errorSpy).join(' ')).toContain('mutually exclusive')
         mockExit.mockRestore()
     })
 
@@ -287,7 +290,7 @@ describe('document commands', () => {
             ]),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errorSpy.mock.calls.flat().join(' ')).toContain('mutually exclusive')
+        expect(lines(errorSpy).join(' ')).toContain('mutually exclusive')
         mockExit.mockRestore()
     })
 
@@ -304,8 +307,8 @@ describe('document commands', () => {
             program.parseAsync(['node', 'ol', 'document', 'move', 'docABC1']),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errorSpy.mock.calls.flat().join(' ')).toContain('--collection')
-        expect(errorSpy.mock.calls.flat().join(' ')).toContain('--parent')
+        expect(lines(errorSpy).join(' ')).toContain('--collection')
+        expect(lines(errorSpy).join(' ')).toContain('--parent')
         mockExit.mockRestore()
     })
 
@@ -347,7 +350,7 @@ describe('document commands', () => {
             ]),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errorSpy.mock.calls.flat().join(' ')).toContain('cannot be its own parent')
+        expect(lines(errorSpy).join(' ')).toContain('cannot be its own parent')
         mockExit.mockRestore()
     })
 })
