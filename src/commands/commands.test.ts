@@ -1,14 +1,8 @@
 import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { lines, mockProcessExit } from '../_fixtures/testing.js'
+import { lines, mockOutlineAuthModule, mockProcessExit } from '../_fixtures/testing.js'
 
-vi.mock('../lib/auth.js', () => ({
-    getApiToken: async () => 'test-token',
-    getBaseUrl: async () => 'https://test.outline.com',
-    getOAuthClientId: async () => undefined,
-    getTokenSource: async () => 'config' as const,
-    clearConfig: vi.fn(),
-}))
+vi.mock('../lib/auth.js', () => mockOutlineAuthModule())
 
 vi.mock('../lib/api.js', () => ({
     apiRequest: vi.fn(),

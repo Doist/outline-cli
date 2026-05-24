@@ -22,3 +22,18 @@ export function mockProcessExit(): MockInstance {
         throw new Error(`process.exit(${code})`)
     })
 }
+
+/**
+ * Default `../lib/auth.js` mock for command-surface tests: a logged-in
+ * config-file user on the test instance. Use as
+ * `vi.mock('../lib/auth.js', () => mockOutlineAuthModule())`.
+ */
+export function mockOutlineAuthModule() {
+    return {
+        getApiToken: async () => 'test-token',
+        getBaseUrl: async () => 'https://test.outline.com',
+        getOAuthClientId: async () => undefined,
+        getTokenSource: async () => 'config' as const,
+        clearConfig: vi.fn(),
+    }
+}
