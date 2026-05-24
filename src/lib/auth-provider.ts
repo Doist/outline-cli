@@ -32,24 +32,71 @@ function stringFlag(flags: Record<string, unknown>, key: string): string | undef
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-async function prompt(question: string): Promise<string> {
-    // Output to stderr so `--json` / `--ndjson` envelopes on stdout stay clean.
+/**
+ * Read a line from stdin, prompting on stderr so `--json` / `--ndjson`
+ * envelopes on stdout stay clean. With `hidden: true` the typed characters are
+ * masked (for secrets): the prompt label is shown once, then readline's echo is
+ * muted so keystrokes don't leak to the terminal.
+ */
+export async function prompt(
+    question: string,
+    options: { hidden?: boolean } = {},
+): Promise<string> {
     const rl = createInterface({ input: process.stdin, output: process.stderr })
     try {
-        return (await rl.question(question)).trim()
+        if (!options.hidden) return (await rl.question(question)).trim()
+        const internal = rl as unknown as { _writeToOutput?: (str: string) => void }
+        const original = internal._writeToOutput?.bind(rl)
+        let muted = false
+        internal._writeToOutput = (str: string) => {
+            if (original && !muted) original(str)
+        }
+        // `question()` writes the prompt synchronously; mute everything after so
+        // only the typed characters are suppressed, not the label.
+        const pending = rl.question(question)
+        muted = true
+        const answer = (await pending).trim()
+        process.stderr.write('\n')
+        return answer
     } finally {
         rl.close()
     }
 }
 
-export async function resolveBaseUrl(flags: Record<string, unknown>): Promise<string> {
-    const fromFlag = stringFlag(flags, 'baseUrl')
+export async function resolveBaseUrl(options: { baseUrl?: unknown } = {}): Promise<string> {
+    const fromFlag =
+        typeof options.baseUrl === 'string' && options.baseUrl.trim()
+            ? options.baseUrl.trim()
+            : undefined
     if (fromFlag) return fromFlag.replace(/\/$/, '')
     const fromEnv = process.env.OUTLINE_URL?.trim()
     if (fromEnv) return fromEnv.replace(/\/$/, '')
     const configured = await getBaseUrl()
+    // Never block a non-interactive shell (CI, piped input) on a prompt —
+    // `auth token` is meant to be scriptable, so fall back to the default.
+    if (!process.stdin.isTTY) return configured.replace(/\/$/, '')
     const answered = await prompt(`Base URL (default: ${configured}): `)
     return (answered || configured).replace(/\/$/, '')
+}
+
+/**
+ * Verify a token by probing `auth.info` and map the response to the persisted
+ * account shape. Shared by the OAuth `validate` hook and `auth token` so the
+ * identity-resolution rules live in one place.
+ */
+export async function identifyAccount(
+    token: string,
+    baseUrl: string,
+    oauthClientId?: string,
+): Promise<OutlineAccount> {
+    const { data } = await apiRequest<AuthInfoResponse>('auth.info', {}, { token, baseUrl })
+    return makeOutlineAccount({
+        id: data.user.id,
+        label: data.user.name,
+        baseUrl,
+        oauthClientId,
+        teamName: data.team.name,
+    })
 }
 
 async function resolveClientId(flags: Record<string, unknown>): Promise<string> {
@@ -106,18 +153,7 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
         },
         validate: async ({ token, handshake }) => {
             const base = baseUrl ?? (await getBaseUrl())
-            const { data } = await apiRequest<AuthInfoResponse>(
-                'auth.info',
-                {},
-                { token, baseUrl: base },
-            )
-            return makeOutlineAccount({
-                id: data.user.id,
-                label: data.user.name,
-                baseUrl: base,
-                oauthClientId: handshake.clientId as string,
-                teamName: data.team.name,
-            })
+            return identifyAccount(token, base, handshake.clientId as string)
         },
         fetchImpl: outlineFetch,
     })

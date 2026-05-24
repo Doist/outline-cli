@@ -2,6 +2,7 @@ import { captureConsole, captureStream, createTestProgram } from '@doist/cli-cor
 import type { Command } from 'commander'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_INFO, STORED_ACCOUNT, STORED_ACCOUNT_BOB } from '../_fixtures/auth.js'
+import type { CliError } from '../lib/errors.js'
 
 // `auth token` save drives the raw store's `set` + `getLastStorageResult`;
 // `auth token view` (real cli-core attacher) reads through the ref-aware store's
@@ -13,9 +14,15 @@ const storeMocks = vi.hoisted(() => ({
     activeAccount: vi.fn(async () => ({ account: STORED_ACCOUNT, isDefault: true })),
 }))
 
+// Stub the shared masked prompt so the interactive (no-argument) save path is
+// testable without a real TTY. `identifyAccount` / `resolveBaseUrl` stay real.
+const promptMock = vi.hoisted(() =>
+    vi.fn<(q: string, o?: { hidden?: boolean }) => Promise<string>>(),
+)
+
 vi.mock('../lib/auth-provider.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../lib/auth-provider.js')>()
-    return { ...actual, createOutlineTokenStore: () => storeMocks }
+    return { ...actual, createOutlineTokenStore: () => storeMocks, prompt: promptMock }
 })
 
 vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
@@ -34,6 +41,13 @@ async function importApiMock() {
     return vi.mocked(apiRequest)
 }
 
+// `process.stdin` is a shared global; mutating `isTTY` would bleed across tests
+// (resetModules doesn't isolate it), so snapshot and restore it every test.
+const ORIGINAL_STDIN_ISTTY = process.stdin.isTTY
+function setStdinIsTTY(value: boolean | undefined): void {
+    Object.defineProperty(process.stdin, 'isTTY', { value, configurable: true })
+}
+
 beforeEach(() => {
     vi.resetModules()
     delete process.env.OUTLINE_API_TOKEN
@@ -45,6 +59,7 @@ afterEach(() => {
     delete process.env.OUTLINE_API_TOKEN
     delete process.env.OUTLINE_URL
     process.argv = ['node', 'ol']
+    setStdinIsTTY(ORIGINAL_STDIN_ISTTY)
 })
 
 describe('auth token (save)', () => {
@@ -82,15 +97,15 @@ describe('auth token (save)', () => {
         expect(lines(log)).toContain('Saved token for Ada Lovelace (Analytics)')
     })
 
-    it('translates a rejected token into AUTH_VERIFICATION_FAILED', async () => {
+    it('collapses any auth.info failure into a leak-free AUTH_VERIFICATION_FAILED', async () => {
         const apiRequest = await importApiMock()
         // Outline's real invalid-token error carries no status code (api.ts drops
-        // it when the body has a message), so the wrapper must not depend on `401`.
+        // it when the body has a message); the wrapper must hide it entirely.
         apiRequest.mockRejectedValue(new Error('API error: Unable to decode token'))
 
         const program = await buildProgram()
-        await expect(
-            program.parseAsync([
+        const err = (await program
+            .parseAsync([
                 'node',
                 'ol',
                 'auth',
@@ -98,17 +113,42 @@ describe('auth token (save)', () => {
                 'bad-token',
                 '--base-url',
                 'https://wiki.test',
-            ]),
-        ).rejects.toHaveProperty('code', 'AUTH_VERIFICATION_FAILED')
+            ])
+            .then(
+                () => null,
+                (e: unknown) => e,
+            )) as CliError
+
+        expect(err.code).toBe('AUTH_VERIFICATION_FAILED')
+        expect(err.message).toBe('Could not verify the token with Outline')
+        expect(err.message).not.toContain('Unable to decode token')
+        expect(err.hints).toEqual(expect.arrayContaining([expect.stringContaining('--base-url')]))
         expect(storeMocks.set).not.toHaveBeenCalled()
     })
 
     it('throws NO_TOKEN when no token is given in a non-interactive shell', async () => {
-        Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true })
+        setStdinIsTTY(false)
         const program = await buildProgram()
         await expect(program.parseAsync(['node', 'ol', 'auth', 'token'])).rejects.toHaveProperty(
             'code',
             'NO_TOKEN',
+        )
+        expect(promptMock).not.toHaveBeenCalled()
+    })
+
+    it('reads the token from a masked prompt when no argument is given in a TTY', async () => {
+        setStdinIsTTY(true)
+        promptMock.mockResolvedValue('tok-prompt')
+        const apiRequest = await importApiMock()
+        apiRequest.mockResolvedValue({ data: AUTH_INFO })
+
+        const program = await buildProgram()
+        await program.parseAsync(['node', 'ol', 'auth', 'token', '--base-url', 'https://wiki.test'])
+
+        expect(promptMock).toHaveBeenCalledWith('API token: ', { hidden: true })
+        expect(storeMocks.set).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'user-uuid', label: 'Ada Lovelace' }),
+            'tok-prompt',
         )
     })
 

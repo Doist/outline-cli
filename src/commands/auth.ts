@@ -1,4 +1,3 @@
-import { createInterface } from 'node:readline'
 import {
     attachLoginCommand,
     attachLogoutCommand,
@@ -16,14 +15,15 @@ import {
     createOutlineAuthProvider,
     createOutlineTokenStore,
     getActiveTokenSource,
+    identifyAccount,
     type OutlineAccount,
     type OutlineTokenStore,
+    prompt,
     resolveBaseUrl,
 } from '../lib/auth-provider.js'
 import { refreshedTokenForStatus } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
 import { isJsonMode } from '../lib/global-args.js'
-import { makeOutlineAccount } from '../lib/outline-account.js'
 import { withUserRefAware } from '../lib/user-ref-store.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
@@ -43,25 +43,6 @@ function resolvePreferredCallbackPort(): number {
     return parsed
 }
 
-// Read a secret without echoing it. Node exposes no public masked-prompt API,
-// so we override readline's private `_writeToOutput` to suppress keystrokes and
-// echo only the prompt label. Output goes to stderr so a `--json` stdout stays clean.
-function promptHiddenToken(question: string): Promise<string> {
-    return new Promise((resolve) => {
-        const rl = createInterface({ input: process.stdin, output: process.stderr })
-        const internal = rl as unknown as { _writeToOutput?: (str: string) => void }
-        const original = internal._writeToOutput?.bind(rl)
-        internal._writeToOutput = (str: string) => {
-            if (original && str.includes(question)) original(question)
-        }
-        rl.question(question, (answer) => {
-            rl.close()
-            process.stderr.write('\n')
-            resolve(answer.trim())
-        })
-    })
-}
-
 async function saveToken(
     store: OutlineTokenStore,
     token: string | undefined,
@@ -75,7 +56,7 @@ async function saveToken(
                 'Or use OAuth: ol auth login',
             ])
         }
-        token = await promptHiddenToken('API token: ')
+        token = await prompt('API token: ', { hidden: true })
     }
     const trimmed = token.trim()
     if (!trimmed) throw new CliError('NO_TOKEN', 'No token provided')
@@ -83,29 +64,17 @@ async function saveToken(
     const baseUrl = await resolveBaseUrl({ baseUrl: options.baseUrl })
 
     // A freshly pasted token is verified by probing `auth.info`. Any failure
-    // (bad token, wrong instance, unreachable host) means we can't trust it, so
-    // surface a single actionable error rather than leaking the raw API string.
-    let data: AuthInfoResponse
+    // (bad token, wrong instance, unreachable host) collapses to one stable
+    // error — never surface the raw API/network string.
+    let account: OutlineAccount
     try {
-        ;({ data } = await apiRequest<AuthInfoResponse>(
-            'auth.info',
-            {},
-            { token: trimmed, baseUrl },
-        ))
-    } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err)
-        throw new CliError('AUTH_VERIFICATION_FAILED', `Could not verify token (${detail})`, [
+        account = await identifyAccount(trimmed, baseUrl)
+    } catch {
+        throw new CliError('AUTH_VERIFICATION_FAILED', 'Could not verify the token with Outline', [
             'Check the token value',
             `Check --base-url matches the instance the token came from (used: ${baseUrl})`,
         ])
     }
-
-    const account = makeOutlineAccount({
-        id: data.user.id,
-        label: data.user.name,
-        baseUrl,
-        teamName: data.team.name,
-    })
     await store.set(account, trimmed)
 
     const machine = isJsonMode()
