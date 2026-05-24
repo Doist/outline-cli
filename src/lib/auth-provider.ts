@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline/promises'
+import { Writable } from 'node:stream'
 import {
     type AccountRef,
     type AuthProvider,
@@ -27,33 +28,84 @@ export type AuthInfoResponse = {
 
 export type OutlineTokenStore = KeyringTokenStore<OutlineAccount>
 
-function stringFlag(flags: Record<string, unknown>, key: string): string | undefined {
-    const value = flags[key]
+function stringFlag(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-async function prompt(question: string): Promise<string> {
-    // Output to stderr so `--json` / `--ndjson` envelopes on stdout stay clean.
-    const rl = createInterface({ input: process.stdin, output: process.stderr })
+/**
+ * Read a line from stdin, prompting on stderr so `--json` / `--ndjson`
+ * envelopes on stdout stay clean. With `hidden: true` the typed characters are
+ * masked (for secrets): the prompt label is shown, then readline's echo is
+ * routed through a muted `Writable` so keystrokes don't leak to the terminal.
+ */
+export async function prompt(
+    question: string,
+    options: { hidden?: boolean } = {},
+): Promise<string> {
+    if (!options.hidden) {
+        const rl = createInterface({ input: process.stdin, output: process.stderr })
+        try {
+            return (await rl.question(question)).trim()
+        } finally {
+            rl.close()
+        }
+    }
+    // Echo the prompt label, then mute so typed characters aren't shown. A muted
+    // `Writable` (public API) avoids poking readline's private `_writeToOutput`.
+    let muted = false
+    const output = new Writable({
+        write(chunk, _encoding, callback) {
+            if (!muted) process.stderr.write(chunk)
+            callback()
+        },
+    })
+    const rl = createInterface({ input: process.stdin, output, terminal: true })
     try {
-        return (await rl.question(question)).trim()
+        const pending = rl.question(question)
+        muted = true
+        const answer = (await pending).trim()
+        process.stderr.write('\n')
+        return answer
     } finally {
         rl.close()
     }
 }
 
-async function resolveBaseUrl(flags: Record<string, unknown>): Promise<string> {
-    const fromFlag = stringFlag(flags, 'baseUrl')
+export async function resolveBaseUrl(options: { baseUrl?: unknown } = {}): Promise<string> {
+    const fromFlag = stringFlag(options.baseUrl)
     if (fromFlag) return fromFlag.replace(/\/$/, '')
     const fromEnv = process.env.OUTLINE_URL?.trim()
     if (fromEnv) return fromEnv.replace(/\/$/, '')
     const configured = await getBaseUrl()
+    // Never block a non-interactive shell (CI, piped input) on a prompt —
+    // `auth token` is meant to be scriptable, so fall back to the default.
+    if (!process.stdin.isTTY) return configured.replace(/\/$/, '')
     const answered = await prompt(`Base URL (default: ${configured}): `)
     return (answered || configured).replace(/\/$/, '')
 }
 
+/**
+ * Verify a token by probing `auth.info` and map the response to the persisted
+ * account shape. Shared by the OAuth `validate` hook and `auth token` so the
+ * identity-resolution rules live in one place.
+ */
+export async function identifyAccount(
+    token: string,
+    baseUrl: string,
+    oauthClientId?: string,
+): Promise<OutlineAccount> {
+    const { data } = await apiRequest<AuthInfoResponse>('auth.info', {}, { token, baseUrl })
+    return makeOutlineAccount({
+        id: data.user.id,
+        label: data.user.name,
+        baseUrl,
+        oauthClientId,
+        teamName: data.team.name,
+    })
+}
+
 async function resolveClientId(flags: Record<string, unknown>): Promise<string> {
-    const fromFlag = stringFlag(flags, 'clientId')
+    const fromFlag = stringFlag(flags.clientId)
     if (fromFlag) return fromFlag
     const existing = await getOAuthClientId()
     if (existing) return existing
@@ -106,18 +158,7 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
         },
         validate: async ({ token, handshake }) => {
             const base = baseUrl ?? (await getBaseUrl())
-            const { data } = await apiRequest<AuthInfoResponse>(
-                'auth.info',
-                {},
-                { token, baseUrl: base },
-            )
-            return makeOutlineAccount({
-                id: data.user.id,
-                label: data.user.name,
-                baseUrl: base,
-                oauthClientId: handshake.clientId as string,
-                teamName: data.team.name,
-            })
+            return identifyAccount(token, base, handshake.clientId as string)
         },
         fetchImpl: outlineFetch,
     })

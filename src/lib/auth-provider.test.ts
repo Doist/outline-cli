@@ -1,3 +1,5 @@
+import { Writable } from 'node:stream'
+import { captureStream } from '@doist/cli-core/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     AUTH_INFO,
@@ -11,6 +13,9 @@ import {
 
 vi.mock('../transport/fetch-with-retry.js', () => ({ fetchWithRetry: vi.fn() }))
 vi.mock('./api.js', () => ({ apiRequest: vi.fn() }))
+
+const readlineMocks = vi.hoisted(() => ({ createInterface: vi.fn() }))
+vi.mock('node:readline/promises', () => ({ createInterface: readlineMocks.createInterface }))
 
 const migrateMocks = vi.hoisted(() => ({
     runMigrateLegacyAuth: vi.fn(),
@@ -580,6 +585,56 @@ describe('resolveActiveAccountSource', () => {
     it('returns null when nothing is active', async () => {
         const resolveActiveAccountSource = await loadResolve()
         await expect(resolveActiveAccountSource()).resolves.toBeNull()
+    })
+})
+
+describe('prompt + resolveBaseUrl', () => {
+    beforeEach(() => {
+        readlineMocks.createInterface.mockReset()
+        delete process.env.OUTLINE_URL
+        configMocks.getConfig.mockReset().mockResolvedValue({})
+    })
+
+    it('prompt({ hidden }) echoes the label but masks the typed characters', async () => {
+        const stderr = captureStream('stderr')
+        let output: Writable | undefined
+        readlineMocks.createInterface.mockImplementation((opts: { output: Writable }) => {
+            output = opts.output
+            return {
+                // Mirror readline: the prompt label is written synchronously
+                // (before `prompt` mutes), the keystroke echo lands afterwards.
+                question: (label: string) => {
+                    output?.write(label)
+                    return new Promise<string>((resolve) => {
+                        queueMicrotask(() => {
+                            output?.write('secret')
+                            resolve('  secret  ')
+                        })
+                    })
+                },
+                close: vi.fn(),
+            }
+        })
+
+        const { prompt } = await import('./auth-provider.js')
+        const answer = await prompt('API token: ', { hidden: true })
+
+        expect(answer).toBe('secret')
+        const written = stderr.mock.calls.map((c) => String(c[0])).join('')
+        expect(written).toContain('API token: ')
+        expect(written).not.toContain('secret')
+    })
+
+    it('resolveBaseUrl returns the configured default without prompting in a non-TTY shell', async () => {
+        const original = process.stdin.isTTY
+        Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true })
+        try {
+            const { resolveBaseUrl } = await import('./auth-provider.js')
+            await expect(resolveBaseUrl()).resolves.toBe('https://app.getoutline.com')
+            expect(readlineMocks.createInterface).not.toHaveBeenCalled()
+        } finally {
+            Object.defineProperty(process.stdin, 'isTTY', { value: original, configurable: true })
+        }
     })
 })
 

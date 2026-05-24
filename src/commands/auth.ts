@@ -1,19 +1,29 @@
-import { attachLoginCommand, attachLogoutCommand, attachStatusCommand } from '@doist/cli-core/auth'
+import {
+    attachLoginCommand,
+    attachLogoutCommand,
+    attachStatusCommand,
+    attachTokenViewCommand,
+} from '@doist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'
-import { logClearResult, logTokenStorageResult } from '../lib/auth-output.js'
+import { TOKEN_ENV_VAR } from '../lib/auth-constants.js'
+import { logClearResult, logSaveResult } from '../lib/auth-output.js'
 import { renderError, renderSuccess } from '../lib/auth-pages.js'
 import {
     type AuthInfoResponse,
     createOutlineAuthProvider,
     createOutlineTokenStore,
     getActiveTokenSource,
+    identifyAccount,
     type OutlineAccount,
     type OutlineTokenStore,
+    prompt,
+    resolveBaseUrl,
 } from '../lib/auth-provider.js'
 import { refreshedTokenForStatus } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
+import { isJsonMode } from '../lib/global-args.js'
 import { withUserRefAware } from '../lib/user-ref-store.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
@@ -31,6 +41,48 @@ function resolvePreferredCallbackPort(): number {
         return DEFAULT_OAUTH_CALLBACK_PORT
     }
     return parsed
+}
+
+async function saveToken(
+    store: OutlineTokenStore,
+    token: string | undefined,
+    options: { baseUrl?: string },
+): Promise<void> {
+    if (!token) {
+        if (!process.stdin.isTTY) {
+            throw new CliError('NO_TOKEN', 'No token provided', [
+                'Pass it as an argument: ol auth token <token>',
+                'Run in an interactive terminal to be prompted for it',
+                'Set OUTLINE_API_TOKEN to authenticate without storing a token',
+                'Or use OAuth: ol auth login',
+            ])
+        }
+        token = await prompt('API token: ', { hidden: true })
+    }
+    const trimmed = token.trim()
+    if (!trimmed) throw new CliError('NO_TOKEN', 'No token provided')
+
+    const baseUrl = await resolveBaseUrl({ baseUrl: options.baseUrl })
+
+    // A freshly pasted token is verified by probing `auth.info`. Any failure
+    // (bad token, wrong instance, unreachable host) collapses to one stable
+    // error — never surface the raw API/network string.
+    let account: OutlineAccount
+    try {
+        account = await identifyAccount(trimmed, baseUrl)
+    } catch {
+        throw new CliError('AUTH_VERIFICATION_FAILED', 'Could not verify the token with Outline', [
+            'Check the token value',
+            `Check --base-url matches the instance the token came from (used: ${baseUrl})`,
+        ])
+    }
+    await store.set(account, trimmed)
+
+    const machine = isJsonMode()
+    if (!machine) {
+        console.log(chalk.green('✓'), `Saved token for ${account.label} (${account.teamName})`)
+    }
+    logSaveResult(store, machine)
 }
 
 export function registerAuthCommand(program: Command): void {
@@ -55,14 +107,7 @@ export function registerAuthCommand(program: Command): void {
             if (!isMachineOutput) {
                 console.log(chalk.green(`Authenticated to ${account.teamName} as ${account.label}`))
             }
-            const result = store.getLastStorageResult()
-            if (result) {
-                logTokenStorageResult(
-                    result,
-                    'Token stored securely in the system credential manager',
-                    isMachineOutput,
-                )
-            }
+            logSaveResult(store, isMachineOutput)
         },
     })
         .description('Authenticate with an Outline instance via OAuth')
@@ -151,5 +196,21 @@ export function registerAuthCommand(program: Command): void {
         onCleared({ view }) {
             logClearResult(store, view.json || view.ndjson)
         },
+    })
+
+    const tokenCmd = auth
+        .command('token [token]')
+        .description('Save an Outline API token for CLI auth (or use the `view` subcommand)')
+        .option('--base-url <url>', 'Outline base URL the token belongs to')
+        .action((token: string | undefined, options: { baseUrl?: string }) =>
+            saveToken(store, token, options),
+        )
+
+    attachTokenViewCommand<OutlineAccount>(tokenCmd, {
+        name: 'view',
+        store: refAware,
+        envVarName: TOKEN_ENV_VAR,
+        description:
+            'Print the stored token for the active user (or --user <ref>) to stdout for scripts',
     })
 }

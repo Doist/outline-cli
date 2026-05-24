@@ -22,6 +22,21 @@ export function logTokenStorageResult(
 }
 
 /**
+ * Surface the result of a token save (`auth login` / `auth token`): the
+ * confirmation goes to stdout, any keyring-fallback warning to stderr. Shared so
+ * both save flows keep identical machine-output and warning behavior.
+ */
+export function logSaveResult(store: OutlineTokenStore, isMachineOutput: boolean): void {
+    const result = store.getLastStorageResult()
+    if (!result) return
+    logTokenStorageResult(
+        result,
+        'Token stored securely in the system credential manager',
+        isMachineOutput,
+    )
+}
+
+/**
  * Surface the result of a token clear (`auth logout` / `account remove`): the
  * confirmation goes to stdout, any keyring-fallback warning to stderr. Shared so
  * both call sites stay in lockstep.
