@@ -60,6 +60,21 @@ export function logTokenStorageResult(
     }
 }
 
+/**
+ * Surface the result of a token clear (`auth logout` / `account remove`): the
+ * confirmation goes to stdout, any keyring-fallback warning to stderr. Shared so
+ * both call sites stay in lockstep.
+ */
+export function logClearResult(store: OutlineTokenStore, isMachineOutput: boolean): void {
+    const result = store.getLastClearResult()
+    if (!result) return
+    logTokenStorageResult(
+        result,
+        'Stored token removed from the system credential manager',
+        isMachineOutput,
+    )
+}
+
 export function registerAuthCommand(program: Command): void {
     const auth = program.command('auth').description('Manage authentication')
 
@@ -176,13 +191,7 @@ export function registerAuthCommand(program: Command): void {
         store: refAware,
         description: 'Clear saved authentication',
         onCleared({ view }) {
-            const result = store.getLastClearResult()
-            if (!result) return
-            logTokenStorageResult(
-                result,
-                'Stored token removed from the system credential manager',
-                view.json || view.ndjson,
-            )
+            logClearResult(store, view.json || view.ndjson)
         },
     })
 }

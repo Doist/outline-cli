@@ -11,14 +11,13 @@ import type { Command } from 'commander'
 import { TOKEN_ENV_VAR } from '../lib/auth-constants.js'
 import {
     createOutlineTokenStore,
-    isLegacyAuthActive,
     type OutlineAccount,
     type OutlineTokenStore,
 } from '../lib/auth-provider.js'
 import { CliError } from '../lib/errors.js'
 import { getRequestedUserRef, isAccessible } from '../lib/global-args.js'
 import { withUserRefAware } from '../lib/user-ref-store.js'
-import { logTokenStorageResult } from './auth.js'
+import { logClearResult } from './auth.js'
 
 /** `<label> (id:<id>)` with an accessibility-aware default marker. */
 function accountLine(account: OutlineAccount, isDefault: boolean): string {
@@ -38,26 +37,39 @@ function projectAccount(account: OutlineAccount, isDefault: boolean) {
 }
 
 /**
- * `current` resolves whatever the runtime would actually use, but the env-token
- * and legacy single-user sources aren't stored accounts — outline's store
- * surfaces them as synthetic snapshots. Short-circuit those (when no explicit
- * `--user` is in play) to `null` so they route to `onNotAuthenticated` and get
- * their own messaging instead of rendering as a blank stored account. An
- * explicit `--user <ref>` always targets a stored account, so it skips the
- * short-circuit and resolves through the ref-aware store.
+ * cli-core's `current` attacher calls `store.activeAccount()` once and renders
+ * any non-null result as a stored account. But outline's store also synthesises
+ * env-token and legacy single-user snapshots, which aren't real stored accounts.
+ *
+ * Resolve the ambient source once here and stash it so the render path reports a
+ * single discriminated shape (`stored` / `env` / `legacy`) without re-probing
+ * config. Precedence mirrors `active()`: an env token wins over stored accounts
+ * (but only when no explicit account was requested), while a stored v2 account
+ * is preferred over a lingering legacy token — so legacy is only surfaced when
+ * the store has no v2 record backing the resolved account.
  */
-function currentStore(refAware: OutlineTokenStore): OutlineTokenStore {
-    return {
+function makeCurrentResolver(store: OutlineTokenStore, refAware: OutlineTokenStore) {
+    let source: 'env' | 'legacy' | undefined
+    const currentStore: OutlineTokenStore = {
         ...refAware,
         activeAccount: async (ref?: AccountRef) => {
+            source = undefined
             const requested = ref ?? getRequestedUserRef()
-            if (requested === undefined) {
-                if (process.env[TOKEN_ENV_VAR]?.trim()) return null
-                if (await isLegacyAuthActive()) return null
+            if (requested === undefined && process.env[TOKEN_ENV_VAR]?.trim()) {
+                source = 'env'
+                return null
             }
-            return refAware.activeAccount(ref)
+            const resolved = await refAware.activeAccount(ref)
+            if (!resolved) return null
+            const isStored = (await store.list()).some(
+                (entry) => entry.account.id === resolved.account.id,
+            )
+            if (isStored) return resolved
+            source = 'legacy'
+            return null
         },
     }
+    return { currentStore, getSource: () => source }
 }
 
 export function registerAccountCommand(program: Command): void {
@@ -82,23 +94,28 @@ export function registerAccountCommand(program: Command): void {
         description: 'Set the default account (matched by Outline user id or display name)',
     })
 
+    const { currentStore, getSource } = makeCurrentResolver(store, refAware)
     attachAccountCurrentCommand<OutlineAccount>(account, {
-        store: currentStore(refAware),
+        store: currentStore,
         description: 'Show the active account (honours --user and OUTLINE_API_TOKEN)',
         renderText: ({ account, isDefault }) => {
             const lines = [accountLine(account, isDefault), `  Base URL: ${account.baseUrl}`]
             if (account.teamName) lines.push(`  Team: ${account.teamName}`)
             return lines
         },
-        renderJson: ({ account, isDefault }) => projectAccount(account, isDefault),
-        async onNotAuthenticated({ view }) {
-            if (process.env[TOKEN_ENV_VAR]?.trim()) {
+        renderJson: ({ account, isDefault }) => ({
+            source: 'stored',
+            account: projectAccount(account, isDefault),
+        }),
+        onNotAuthenticated({ view }) {
+            const source = getSource()
+            if (source === 'env') {
                 emitView(view, { source: 'env' }, () => [
                     `Using ${TOKEN_ENV_VAR} environment variable (no stored account).`,
                 ])
                 return
             }
-            if (await isLegacyAuthActive()) {
+            if (source === 'legacy') {
                 emitView(view, { source: 'legacy' }, () => [
                     'Using legacy single-user credentials. Run `ol auth login` to migrate to a stored account.',
                 ])
@@ -112,7 +129,7 @@ export function registerAccountCommand(program: Command): void {
         store,
         description: 'Remove a stored account (clears keyring + config entry)',
         renderText: ({ account, wasDefault }) => {
-            const lines = [`${chalk.green('✓')} Removed ${account.label ?? account.id}`]
+            const lines = [`${chalk.green('✓')} Removed ${account.label}`]
             if (wasDefault) {
                 lines.push(
                     chalk.dim(
@@ -122,20 +139,16 @@ export function registerAccountCommand(program: Command): void {
             }
             return lines
         },
-        onRemoved: ({ view }) => {
-            const result = store.getLastClearResult()
-            if (!result) return
-            logTokenStorageResult(
-                result,
-                'Stored token removed from the system credential manager',
-                view.json || view.ndjson,
-            )
-        },
+        onRemoved: ({ view }) => logClearResult(store, view.json || view.ndjson),
     })
 
     // `attachAccountListCommand` registers `list` without commander's default
     // flag, so wire the parent default explicitly to keep bare `ol account`
-    // listing stored accounts.
+    // listing stored accounts. Commander exposes no public setter for this in
+    // the pinned version (`typeof account.defaultCommand === 'undefined'`), and
+    // the attacher owns the `command('list')` call so `{ isDefault: true }` can't
+    // be passed at creation — hence the internal-field assignment (mirrors
+    // twist-cli).
     ;(account as unknown as { _defaultCommandName: string })._defaultCommandName = 'list'
 
     account.addHelpText(

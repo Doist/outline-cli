@@ -96,7 +96,7 @@ ol account                             # List stored accounts (default subcomman
 ol account list                        # List stored accounts, default marked
 ol account list --json | --ndjson      # Machine-readable list ({accounts, default}; --ndjson streams one per line)
 ol account current                     # Show the active account (honours --user and OUTLINE_API_TOKEN)
-ol account current --json | --ndjson   # Machine-readable active account ({id, label, teamName, baseUrl, isDefault})
+ol account current --json | --ndjson   # Discriminated by source: {source:"stored", account:{id, label, teamName, baseUrl, isDefault}} | {source:"env"} | {source:"legacy"}
 ol account use <id|name>               # Set the default account used when --user is omitted
 ol account use <id|name> --json        # Machine-readable envelope ({ok: true, default: <id>}; --ndjson is silent)
 ol account remove <id|name>            # Remove a stored account (clears keyring + config entry)

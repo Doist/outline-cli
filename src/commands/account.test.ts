@@ -5,9 +5,10 @@ import { STORED_ACCOUNT, STORED_ACCOUNT_BOB } from '../_fixtures/auth.js'
 import type { OutlineAccount } from '../lib/outline-account.js'
 import { matchOutlineAccount } from '../lib/outline-account.js'
 
-// In-memory stand-in for the keyring store: `setDefault` / `clear` resolve the
+// In-memory stand-in for the keyring store. `setDefault` / `clear` resolve the
 // raw `<ref>` through the real `matchOutlineAccount` (id or display name), so
-// ref-matching is exercised rather than stubbed.
+// the cli-core attachers run against a realistic store and exercise the actual
+// ref-matching + default-resolution wiring this command adds — not just a stub.
 const storeMocks = vi.hoisted(() => ({
     list: vi.fn(),
     setDefault: vi.fn(),
@@ -21,15 +22,9 @@ const storeMocks = vi.hoisted(() => ({
     getLastClearResult: vi.fn(() => undefined),
 }))
 
-const legacyMock = vi.hoisted(() => ({ isLegacyAuthActive: vi.fn(async () => false) }))
-
 vi.mock('../lib/auth-provider.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../lib/auth-provider.js')>()
-    return {
-        ...actual,
-        createOutlineTokenStore: () => storeMocks,
-        isLegacyAuthActive: legacyMock.isLegacyAuthActive,
-    }
+    return { ...actual, createOutlineTokenStore: () => storeMocks }
 })
 
 function lines(spy: MockInstance): string {
@@ -69,11 +64,13 @@ async function buildProgram(): Promise<Command> {
 }
 
 let logSpy: MockInstance
+let errSpy: MockInstance
 
 beforeEach(() => {
     vi.resetModules()
     delete process.env.OUTLINE_API_TOKEN
     logSpy = captureConsole('log')
+    errSpy = captureConsole('error')
 })
 
 afterEach(() => {
@@ -159,6 +156,17 @@ describe('account command', () => {
             expect(out).toContain('Removed Ada')
             expect(out).toMatch(/Cleared default account/)
         })
+
+        it('surfaces a keyring-fallback warning on stderr', async () => {
+            seedStore([STORED_ACCOUNT, 'default'])
+            storeMocks.getLastClearResult.mockReturnValue({
+                storage: 'config-file',
+                warning: 'OS keyring unavailable; cleared the config-file token instead.',
+            })
+            const program = await buildProgram()
+            await program.parseAsync(['node', 'ol', 'account', 'remove', STORED_ACCOUNT.id])
+            expect(lines(errSpy)).toContain('OS keyring unavailable')
+        })
     })
 
     describe('current', () => {
@@ -171,18 +179,57 @@ describe('account command', () => {
             expect(out).toContain(STORED_ACCOUNT.baseUrl)
         })
 
+        it('emits a {source:"stored", account} envelope under --json', async () => {
+            seedStore([STORED_ACCOUNT, 'default'])
+            const program = await buildProgram()
+            await program.parseAsync(['node', 'ol', 'account', 'current', '--json'])
+            const payload = JSON.parse(lines(logSpy))
+            expect(payload.source).toBe('stored')
+            expect(payload.account).toMatchObject({ id: STORED_ACCOUNT.id, isDefault: true })
+            expect(payload.account).not.toHaveProperty('oauthClientId')
+        })
+
+        it('honours --user, bypassing an env token to show the requested account', async () => {
+            seedStore([STORED_ACCOUNT, 'default'], STORED_ACCOUNT_BOB)
+            process.env.OUTLINE_API_TOKEN = 'tok-env'
+            // The root `--user` is stripped from argv before commander in the real
+            // flow; the global-args parser still reads it off the original argv.
+            process.argv = ['node', 'ol', '--user', 'Bob', 'account', 'current']
+            const program = await buildProgram()
+            await program.parseAsync(['node', 'ol', 'account', 'current'])
+            const out = lines(logSpy)
+            expect(out).toContain('Bob')
+            expect(out).not.toContain('OUTLINE_API_TOKEN')
+        })
+
         it('reports the env-token source when OUTLINE_API_TOKEN is set', async () => {
             seedStore([STORED_ACCOUNT, 'default'])
             process.env.OUTLINE_API_TOKEN = 'tok-env'
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'current'])
             expect(lines(logSpy)).toContain('OUTLINE_API_TOKEN')
+            // Env wins before any stored-account resolution is attempted.
             expect(storeMocks.activeAccount).not.toHaveBeenCalled()
         })
 
-        it('reports the legacy source when a legacy session is active', async () => {
-            seedStore()
-            legacyMock.isLegacyAuthActive.mockResolvedValue(true)
+        it('prefers a stored default over a lingering legacy token', async () => {
+            // Store resolves a v2 default; a legacy snapshot also exists (its
+            // account is absent from list()). The stored account must win.
+            seedStore([STORED_ACCOUNT, 'default'])
+            const program = await buildProgram()
+            await program.parseAsync(['node', 'ol', 'account', 'current'])
+            expect(lines(logSpy)).toContain('Ada')
+            expect(lines(logSpy)).not.toMatch(/legacy/)
+        })
+
+        it('reports the legacy source when only a legacy snapshot resolves', async () => {
+            // No v2 records, but the store still resolves a legacy single-user
+            // snapshot (not present in list()).
+            storeMocks.list.mockResolvedValue([])
+            storeMocks.activeAccount.mockResolvedValue({
+                account: STORED_ACCOUNT,
+                isDefault: true,
+            })
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'current'])
             expect(lines(logSpy)).toMatch(/legacy single-user credentials/)
@@ -190,7 +237,6 @@ describe('account command', () => {
 
         it('throws NOT_AUTHENTICATED when nothing is active', async () => {
             seedStore()
-            legacyMock.isLegacyAuthActive.mockResolvedValue(false)
             const program = await buildProgram()
             await expect(
                 program.parseAsync(['node', 'ol', 'account', 'current']),
