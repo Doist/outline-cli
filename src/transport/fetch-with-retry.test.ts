@@ -1,5 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { okResponse } from '../_fixtures/auth.js'
 import { clearProxyEnv, restoreProxyEnv } from '../_fixtures/proxy-env.js'
+
+/** A `fetch` impl that never resolves and rejects with the abort reason on signal. */
+function abortableFetch(_url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+    return new Promise<Response>((_resolve, reject) => {
+        options?.signal?.addEventListener(
+            'abort',
+            () => {
+                const reason = options.signal?.reason
+                reject(
+                    reason instanceof Error
+                        ? reason
+                        : new Error(String(reason ?? 'Request aborted')),
+                )
+            },
+            { once: true },
+        )
+    })
+}
 
 describe('fetchWithRetry', () => {
     beforeEach(() => {
@@ -19,12 +38,7 @@ describe('fetchWithRetry', () => {
 
     it('uses the default dispatcher for requests', async () => {
         const fetchMock = vi.fn()
-        fetchMock.mockResolvedValue(
-            new Response(JSON.stringify({ ok: true }), {
-                status: 200,
-                statusText: 'OK',
-            }),
-        )
+        fetchMock.mockResolvedValue(okResponse({ ok: true }))
         vi.stubGlobal('fetch', fetchMock)
 
         const { getDefaultDispatcher } = await import('./http-dispatcher.js')
@@ -47,12 +61,7 @@ describe('fetchWithRetry', () => {
         fetchMock
             .mockRejectedValueOnce(new TypeError('Failed to fetch'))
             .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-            .mockResolvedValue(
-                new Response(JSON.stringify({ ok: true }), {
-                    status: 200,
-                    statusText: 'OK',
-                }),
-            )
+            .mockResolvedValue(okResponse({ ok: true }))
         vi.stubGlobal('fetch', fetchMock)
 
         const { fetchWithRetry } = await import('./fetch-with-retry.js')
@@ -73,29 +82,8 @@ describe('fetchWithRetry', () => {
 
         const fetchMock = vi.fn()
         fetchMock
-            .mockImplementationOnce(
-                (_url: RequestInfo | URL, options?: RequestInit) =>
-                    new Promise<Response>((_resolve, reject) => {
-                        options?.signal?.addEventListener(
-                            'abort',
-                            () => {
-                                const reason = options.signal?.reason
-                                reject(
-                                    reason instanceof Error
-                                        ? reason
-                                        : new Error(String(reason ?? 'Request aborted')),
-                                )
-                            },
-                            { once: true },
-                        )
-                    }),
-            )
-            .mockResolvedValueOnce(
-                new Response(JSON.stringify({ ok: true }), {
-                    status: 200,
-                    statusText: 'OK',
-                }),
-            )
+            .mockImplementationOnce(abortableFetch)
+            .mockResolvedValueOnce(okResponse({ ok: true }))
         vi.stubGlobal('fetch', fetchMock)
 
         const { fetchWithRetry } = await import('./fetch-with-retry.js')
@@ -122,23 +110,7 @@ describe('fetchWithRetry', () => {
         vi.useFakeTimers()
 
         const fetchMock = vi.fn()
-        fetchMock.mockImplementation(
-            (_url: RequestInfo | URL, options?: RequestInit) =>
-                new Promise<Response>((_resolve, reject) => {
-                    options?.signal?.addEventListener(
-                        'abort',
-                        () => {
-                            const reason = options.signal?.reason
-                            reject(
-                                reason instanceof Error
-                                    ? reason
-                                    : new Error(String(reason ?? 'Request aborted')),
-                            )
-                        },
-                        { once: true },
-                    )
-                }),
-        )
+        fetchMock.mockImplementation(abortableFetch)
         vi.stubGlobal('fetch', fetchMock)
 
         const { getDefaultDispatcher } = await import('./http-dispatcher.js')
