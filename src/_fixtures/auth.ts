@@ -11,13 +11,13 @@ export const STORED_ACCOUNT: OutlineAccount = {
     teamName: 'Analytics',
 }
 
-/** Snake-case `StoredUser` twin of {@link STORED_ACCOUNT} — same persona on disk. */
+/** Snake-case `StoredUser` twin of {@link STORED_ACCOUNT}, derived so the two can't drift. */
 export const STORED_USER_ADA: StoredUser = {
-    id: 'user-uuid',
-    name: 'Ada',
-    base_url: 'https://wiki.example.com',
-    oauth_client_id: 'cid-xyz',
-    team_name: 'Analytics',
+    id: STORED_ACCOUNT.id,
+    name: STORED_ACCOUNT.label,
+    base_url: STORED_ACCOUNT.baseUrl,
+    oauth_client_id: STORED_ACCOUNT.oauthClientId,
+    team_name: STORED_ACCOUNT.teamName,
 }
 
 /** Secondary persisted `OutlineAccount` on a different instance — for multi-account tests. */

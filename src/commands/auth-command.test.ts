@@ -2,18 +2,17 @@ import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_INFO, TWO_USER_CONFIG } from '../_fixtures/auth.js'
-import { lines } from '../_fixtures/testing.js'
+import { lines, mockOutlineAuthModule } from '../_fixtures/testing.js'
 
-vi.mock('../lib/auth.js', () => ({
-    getApiToken: async () => 'test-token',
-    getBaseUrl: async () => 'https://test.outline.com',
-    getOAuthClientId: async () => undefined,
-    getActiveTokenSource: async () =>
-        process.env.OUTLINE_API_TOKEN ? ('env' as const) : ('secure-store' as const),
-    // status resolves the live token for the selected account via this; echo
-    // the snapshot token back (no refresh in these command-surface tests).
-    refreshedTokenForStatus: async (_account: unknown, fallback: string) => fallback,
-}))
+vi.mock('../lib/auth.js', () =>
+    mockOutlineAuthModule({
+        getActiveTokenSource: async () =>
+            process.env.OUTLINE_API_TOKEN ? ('env' as const) : ('secure-store' as const),
+        // status resolves the live token for the selected account via this; echo
+        // the snapshot token back (no refresh in these command-surface tests).
+        refreshedTokenForStatus: async (_account: unknown, fallback: string) => fallback,
+    }),
+)
 
 vi.mock('../lib/api.js', () => ({ apiRequest: vi.fn() }))
 

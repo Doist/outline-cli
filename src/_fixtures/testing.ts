@@ -25,15 +25,16 @@ export function mockProcessExit(): MockInstance {
 
 /**
  * Default `../lib/auth.js` mock for command-surface tests: a logged-in
- * config-file user on the test instance. Use as
- * `vi.mock('../lib/auth.js', () => mockOutlineAuthModule())`.
+ * config-file user on the test instance. Keys mirror the real `auth.ts`
+ * exports; pass `overrides` for the few tests that need dynamic behaviour.
+ * Use as `vi.mock('../lib/auth.js', () => mockOutlineAuthModule())`.
  */
-export function mockOutlineAuthModule() {
+export function mockOutlineAuthModule(overrides: Record<string, unknown> = {}) {
     return {
         getApiToken: async () => 'test-token',
         getBaseUrl: async () => 'https://test.outline.com',
         getOAuthClientId: async () => undefined,
-        getTokenSource: async () => 'config' as const,
-        clearConfig: vi.fn(),
+        getActiveTokenSource: async () => 'config-file' as const,
+        ...overrides,
     }
 }

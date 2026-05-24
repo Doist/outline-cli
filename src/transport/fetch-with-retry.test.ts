@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { okResponse } from '../_fixtures/auth.js'
-import { clearProxyEnv, restoreProxyEnv } from '../_fixtures/proxy-env.js'
+import { captureProxyEnv, clearProxyEnv, restoreProxyEnv } from '../_fixtures/proxy-env.js'
+
+const originalProxyEnv = captureProxyEnv()
 
 /** A `fetch` impl that never resolves and rejects with the abort reason on signal. */
 function abortableFetch(_url: RequestInfo | URL, options?: RequestInit): Promise<Response> {
@@ -29,7 +31,7 @@ describe('fetchWithRetry', () => {
     afterEach(async () => {
         const { resetDefaultDispatcherForTests } = await import('./http-dispatcher.js')
         await resetDefaultDispatcherForTests()
-        restoreProxyEnv()
+        restoreProxyEnv(originalProxyEnv)
         vi.useRealTimers()
         vi.unstubAllGlobals()
         vi.restoreAllMocks()

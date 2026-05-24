@@ -7,8 +7,12 @@ const PROXY_ENV_KEYS = [
     'no_proxy',
 ] as const
 
-/** Snapshot of the ambient proxy env, captured once at module load. */
-const originalProxyEnv = new Map(PROXY_ENV_KEYS.map((key) => [key, process.env[key]]))
+type ProxyEnvSnapshot = Map<string, string | undefined>
+
+/** Snapshot the current proxy env. Take this per suite so restore is order-independent. */
+export function captureProxyEnv(): ProxyEnvSnapshot {
+    return new Map(PROXY_ENV_KEYS.map((key) => [key, process.env[key]]))
+}
 
 /** Unset every proxy env var so transport-selection tests start from a clean slate. */
 export function clearProxyEnv(): void {
@@ -17,10 +21,10 @@ export function clearProxyEnv(): void {
     }
 }
 
-/** Restore the proxy env to the snapshot taken at module load. */
-export function restoreProxyEnv(): void {
+/** Restore the proxy env to a snapshot taken by {@link captureProxyEnv}. */
+export function restoreProxyEnv(snapshot: ProxyEnvSnapshot): void {
     for (const key of PROXY_ENV_KEYS) {
-        const value = originalProxyEnv.get(key)
+        const value = snapshot.get(key)
         if (value === undefined) {
             delete process.env[key]
             continue
