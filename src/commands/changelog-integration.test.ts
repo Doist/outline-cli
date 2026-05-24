@@ -1,4 +1,4 @@
-import { Command } from 'commander'
+import { createTestProgram } from '@doist/cli-core/testing'
 import { describe, expect, it } from 'vitest'
 import { BaseCliError } from '../lib/errors.js'
 import { formatError, formatErrorJson } from '../lib/output.js'
@@ -6,9 +6,7 @@ import { registerChangelogCommand } from './changelog.js'
 
 describe('changelog command end-to-end', () => {
     it('rejects with BaseCliError(INVALID_TYPE) when --count is not a number', async () => {
-        const program = new Command()
-        program.exitOverride()
-        registerChangelogCommand(program)
+        const program = createTestProgram(registerChangelogCommand)
 
         await expect(
             program.parseAsync(['node', 'ol', 'changelog', '-n', 'abc']),
@@ -22,9 +20,7 @@ describe('changelog command end-to-end', () => {
     })
 
     it('formats the rejected BaseCliError through formatError (human)', async () => {
-        const program = new Command()
-        program.exitOverride()
-        registerChangelogCommand(program)
+        const program = createTestProgram(registerChangelogCommand)
 
         const err = await program
             .parseAsync(['node', 'ol', 'changelog', '-n', 'abc'])
@@ -36,9 +32,7 @@ describe('changelog command end-to-end', () => {
     })
 
     it('formats the rejected BaseCliError through formatErrorJson', async () => {
-        const program = new Command()
-        program.exitOverride()
-        registerChangelogCommand(program)
+        const program = createTestProgram(registerChangelogCommand)
 
         const err = await program
             .parseAsync(['node', 'ol', 'changelog', '-n', 'abc'])

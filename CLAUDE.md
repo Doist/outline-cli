@@ -44,8 +44,8 @@ Vitest with module mocking. Tests are colocated next to the source they cover (`
 
 - Mock `apiRequest` with `vi.mock()`
 - Stub `fetch` globally for API tests
-- Capture `console.log` calls in an array for output assertions
-- Use `program.exitOverride()` + `program.parseAsync()` to test command parsing
+- Capture output with `captureConsole(method?)` / `captureStream(stream?)` from `@doist/cli-core/testing` (auto-restoring spies); read `spy.mock.calls` for assertions
+- Build the command harness with `createTestProgram(register)` from `@doist/cli-core/testing` (applies `exitOverride()`), then `program.parseAsync()`
 - Auth tests use tmpdir with `process.pid` for filesystem isolation
 
 ## Skill Content (Agent Command Reference)

@@ -1,5 +1,4 @@
-import { describeEmptyMachineOutput } from '@doist/cli-core/testing'
-import { Command } from 'commander'
+import { createTestProgram, describeEmptyMachineOutput } from '@doist/cli-core/testing'
 import { vi } from 'vitest'
 
 vi.mock('../lib/auth.js', () => ({
@@ -18,9 +17,7 @@ describeEmptyMachineOutput('ol document list', {
     setup: () => {},
     run: async (extraArgs) => {
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
         await program.parseAsync(['node', 'ol', 'document', 'list', ...extraArgs])
     },
     humanMessage: 'No documents found.',

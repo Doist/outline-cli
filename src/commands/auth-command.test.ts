@@ -1,5 +1,6 @@
+import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import { Command } from 'commander'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_INFO, TWO_USER_CONFIG } from '../_fixtures/auth.js'
 
 vi.mock('../lib/auth.js', () => ({
@@ -32,16 +33,11 @@ vi.mock('@doist/cli-core/auth', async () => ({
 }))
 
 /**
- * Replace `console.log` with a recorder. Tests read `logs` to assert on
- * stdout-bound output. Lines are joined with spaces, matching how chalk's
- * styled fragments arrive at the spy.
+ * Read a `captureConsole` spy's recorded calls as joined lines, matching how
+ * chalk's styled fragments arrive (one console call → one space-joined line).
  */
-function captureLogs(): { logs: string[] } {
-    const logs: string[] = []
-    vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-        logs.push(args.join(' '))
-    })
-    return { logs }
+function lines(spy: MockInstance): string[] {
+    return spy.mock.calls.map((args) => args.join(' '))
 }
 
 async function captureAttachOptions() {
@@ -49,9 +45,7 @@ async function captureAttachOptions() {
     const login = new Command('login')
     vi.mocked(attachLoginCommand).mockReturnValue(login)
     const { registerAuthCommand } = await import('./auth.js')
-    const program = new Command()
-    program.exitOverride()
-    registerAuthCommand(program)
+    const program = createTestProgram(registerAuthCommand)
     return { options: vi.mocked(attachLoginCommand).mock.calls[0][1], login, program }
 }
 
@@ -79,7 +73,7 @@ afterEach(() => {
 describe('registerAuthCommand', () => {
     it('wires --base-url / --client-id, env-driven port, and prints success only in human output mode', async () => {
         process.env.OUTLINE_OAUTH_CALLBACK_PORT = '7000'
-        const { logs } = captureLogs()
+        const log = captureConsole()
 
         const { options, login } = await captureAttachOptions()
 
@@ -98,8 +92,8 @@ describe('registerAuthCommand', () => {
         await options.onSuccess({ view: { json: false, ndjson: false }, flags: {}, account })
         await options.onSuccess({ view: { json: true, ndjson: false }, flags: {}, account })
 
-        expect(logs.length).toBe(1)
-        expect(logs[0]).toContain('Authenticated to Analytics as Ada')
+        expect(lines(log).length).toBe(1)
+        expect(lines(log)[0]).toContain('Authenticated to Analytics as Ada')
     })
 
     it('falls back to the default callback port when the env var is unparseable', async () => {
@@ -117,7 +111,7 @@ describe('auth status subcommand', () => {
 
     it('renders the human status from the env-token snapshot path', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const { logs } = captureLogs()
+        const log = captureConsole()
         const apiRequest = await importApiMock()
         apiRequest.mockResolvedValue({ data: AUTH_INFO })
 
@@ -131,25 +125,25 @@ describe('auth status subcommand', () => {
             {},
             { token: 'env-token', baseUrl: 'https://test.outline.com' },
         )
-        expect(logs.some((l) => l.includes('Authenticated'))).toBe(true)
-        expect(logs.some((l) => l.includes('Team:') && l.includes('Analytics'))).toBe(true)
-        expect(logs.some((l) => l.includes('Ada Lovelace') && l.includes('ada@example.com'))).toBe(
-            true,
-        )
-        expect(logs.some((l) => l.includes('Token source: env'))).toBe(true)
+        expect(lines(log).some((l) => l.includes('Authenticated'))).toBe(true)
+        expect(lines(log).some((l) => l.includes('Team:') && l.includes('Analytics'))).toBe(true)
+        expect(
+            lines(log).some((l) => l.includes('Ada Lovelace') && l.includes('ada@example.com')),
+        ).toBe(true)
+        expect(lines(log).some((l) => l.includes('Token source: env'))).toBe(true)
     })
 
     it('emits a PII-free JSON envelope under --json', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const { logs } = captureLogs()
+        const log = captureConsole()
         const apiRequest = await importApiMock()
         apiRequest.mockResolvedValue({ data: AUTH_INFO })
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'status', '--json'])
 
-        expect(logs).toHaveLength(1)
-        const payload = JSON.parse(logs[0])
+        expect(lines(log)).toHaveLength(1)
+        const payload = JSON.parse(lines(log)[0])
         expect(payload).toEqual({
             id: 'user-uuid',
             team: 'Analytics',
@@ -162,16 +156,16 @@ describe('auth status subcommand', () => {
 
     it('emits a single newline-free NDJSON line under --ndjson', async () => {
         process.env.OUTLINE_API_TOKEN = 'env-token'
-        const { logs } = captureLogs()
+        const log = captureConsole()
         const apiRequest = await importApiMock()
         apiRequest.mockResolvedValue({ data: AUTH_INFO })
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'status', '--ndjson'])
 
-        expect(logs).toHaveLength(1)
-        expect(logs[0]).not.toContain('\n')
-        expect(JSON.parse(logs[0])).toEqual({
+        expect(lines(log)).toHaveLength(1)
+        expect(lines(log)[0]).not.toContain('\n')
+        expect(JSON.parse(lines(log)[0])).toEqual({
             id: 'user-uuid',
             team: 'Analytics',
             baseUrl: 'https://test.outline.com',
@@ -230,22 +224,22 @@ describe('auth status subcommand', () => {
 
 describe('auth logout subcommand', () => {
     it('prints the registrar success line in human mode', async () => {
-        const { logs } = captureLogs()
+        const log = captureConsole()
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'logout'])
 
-        expect(logs).toContain('✓ Logged out')
+        expect(lines(log)).toContain('✓ Logged out')
     })
 
     it('emits {"ok": true} under --json and skips the human success line', async () => {
-        const { logs } = captureLogs()
+        const log = captureConsole()
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'logout', '--json'])
 
-        expect(logs).toHaveLength(1)
-        expect(JSON.parse(logs[0])).toEqual({ ok: true })
+        expect(lines(log)).toHaveLength(1)
+        expect(JSON.parse(lines(log)[0])).toEqual({ ok: true })
     })
 
     it('stays silent on stdout under --ndjson (no human storage-result line leaks)', async () => {
@@ -254,49 +248,39 @@ describe('auth logout subcommand', () => {
         // clean stdout — any human-readable line here would corrupt the
         // stream. Guards the `isMachineOutput` branch in
         // `logTokenStorageResult`.
-        const { logs } = captureLogs()
+        const log = captureConsole()
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'logout', '--ndjson'])
 
-        expect(logs).toEqual([])
+        expect(lines(log)).toEqual([])
     })
 })
 
 describe('logTokenStorageResult', () => {
-    function captureStreams() {
-        const logs: string[] = []
-        const errs: string[] = []
-        vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
-            logs.push(a.join(' '))
-        })
-        vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
-            errs.push(a.join(' '))
-        })
-        return { logs, errs }
-    }
-
     it('prints the secure-store confirmation to stdout in human mode', async () => {
-        const { logs, errs } = captureStreams()
+        const log = captureConsole()
+        const errorSpy = captureConsole('error')
         const { logTokenStorageResult } = await import('./auth.js')
 
         logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', false)
 
-        expect(logs.some((l) => l.includes('Token stored securely'))).toBe(true)
-        expect(errs).toEqual([])
+        expect(lines(log).some((l) => l.includes('Token stored securely'))).toBe(true)
+        expect(lines(errorSpy)).toEqual([])
     })
 
     it('suppresses the stdout confirmation in machine-output mode', async () => {
-        const { logs } = captureStreams()
+        const log = captureConsole()
         const { logTokenStorageResult } = await import('./auth.js')
 
         logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', true)
 
-        expect(logs).toEqual([])
+        expect(lines(log)).toEqual([])
     })
 
     it('routes the keyring-fallback warning to stderr (in both human and machine modes)', async () => {
-        const { logs, errs } = captureStreams()
+        const log = captureConsole()
+        const errorSpy = captureConsole('error')
         const { logTokenStorageResult } = await import('./auth.js')
 
         logTokenStorageResult(
@@ -306,7 +290,9 @@ describe('logTokenStorageResult', () => {
         )
 
         // No stdout in machine mode, but warning still reaches operator on stderr.
-        expect(logs).toEqual([])
-        expect(errs.some((e) => e.includes('system credential manager unavailable'))).toBe(true)
+        expect(lines(log)).toEqual([])
+        expect(
+            lines(errorSpy).some((e) => e.includes('system credential manager unavailable')),
+        ).toBe(true)
     })
 })
