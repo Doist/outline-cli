@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SKIPPED_RESULT } from '../_fixtures/auth.js'
+import { SKIPPED_RESULT, TWO_USER_CONFIG } from '../_fixtures/auth.js'
 
 const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}-auth`)
 const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
@@ -126,26 +126,7 @@ describe('auth', () => {
     })
 
     describe('global --user selection', () => {
-        const TWO_USERS = JSON.stringify({
-            config_version: 2,
-            users: [
-                {
-                    id: 'id-ada',
-                    name: 'Ada',
-                    base_url: 'https://ada.example.com',
-                    oauth_client_id: 'cid-ada',
-                    token: 'tok-ada',
-                },
-                {
-                    id: 'id-bob',
-                    name: 'Bob',
-                    base_url: 'https://bob.example.com',
-                    oauth_client_id: 'cid-bob',
-                    token: 'tok-bob',
-                },
-            ],
-            default_user_id: 'id-ada',
-        })
+        const TWO_USERS = JSON.stringify(TWO_USER_CONFIG)
 
         function withUser(ref: string) {
             writeFileSync(TEST_CONFIG_PATH, TWO_USERS)

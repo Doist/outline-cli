@@ -81,14 +81,14 @@ describe('withUserRefAware', () => {
         expect(seen.active).toBe('id-ada')
     })
 
-    it('throws ACCOUNT_NOT_FOUND when the global ref matches nothing', async () => {
+    it('throws a typed ACCOUNT_NOT_FOUND when the global ref matches nothing', async () => {
         setUserFlag('nobody')
         const { store } = fakeStore([ADA, BOB])
-        await expect(withUserRefAware(store).active()).rejects.toMatchObject({
-            code: 'ACCOUNT_NOT_FOUND',
-        })
-        // And it is a typed CliError, not a bare Error.
-        await expect(withUserRefAware(store).active()).rejects.toBeInstanceOf(BaseCliError)
+        const caught = await withUserRefAware(store)
+            .active()
+            .catch((e) => e)
+        expect(caught).toBeInstanceOf(BaseCliError)
+        expect(caught).toMatchObject({ code: 'ACCOUNT_NOT_FOUND' })
     })
 
     it('applies the ref to activeBundle, activeAccount, and clear too', async () => {

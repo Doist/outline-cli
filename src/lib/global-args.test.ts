@@ -30,20 +30,12 @@ beforeEach(() => setArgv())
 afterEach(() => setArgv())
 
 describe('getRequestedUserRef', () => {
-    it('resolves the space form', () => {
+    it('resolves the ref off argv', () => {
         setArgv('--user', 'scott', 'document', 'list')
         expect(getRequestedUserRef()).toBe('scott')
     })
-
-    it('resolves the = form', () => {
-        setArgv('--user=scott@example.com', 'document', 'list')
-        expect(getRequestedUserRef()).toBe('scott@example.com')
-    })
-
-    it('is undefined when absent', () => {
-        setArgv('document', 'list')
-        expect(getRequestedUserRef()).toBeUndefined()
-    })
+    // Absent-flag case is covered by the applyUserSelector no-op test below;
+    // flag-form parsing (`--user=`) belongs to cli-core's parseGlobalArgs.
 })
 
 describe('validateRootUserFlag', () => {

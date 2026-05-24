@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AUTH_INFO } from '../_fixtures/auth.js'
+import { AUTH_INFO, TWO_USER_CONFIG } from '../_fixtures/auth.js'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
@@ -185,26 +185,7 @@ describe('auth status subcommand', () => {
         // and resolve the named account, not the default. Guards against a
         // regression where `registerAuthCommand` passes the raw store.
         const { getConfig } = await import('../lib/config.js')
-        vi.mocked(getConfig).mockResolvedValue({
-            config_version: 2,
-            users: [
-                {
-                    id: 'id-ada',
-                    name: 'Ada',
-                    base_url: 'https://ada.example.com',
-                    oauth_client_id: 'cid-ada',
-                    token: 'tok-ada',
-                },
-                {
-                    id: 'id-bob',
-                    name: 'Bob',
-                    base_url: 'https://bob.example.com',
-                    oauth_client_id: 'cid-bob',
-                    token: 'tok-bob',
-                },
-            ],
-            default_user_id: 'id-ada',
-        })
+        vi.mocked(getConfig).mockResolvedValue(TWO_USER_CONFIG)
         const { resetGlobalArgs } = await import('../lib/global-args.js')
         process.argv = ['node', 'ol', '--user', 'Bob', 'auth', 'status']
         resetGlobalArgs()

@@ -1,4 +1,5 @@
 import type { MigrateAuthResult } from '@doist/cli-core/auth'
+import type { Config } from '../lib/config.js'
 import type { OutlineAccount } from '../lib/outline-account.js'
 
 /** Canonical persisted `OutlineAccount` used across auth tests. */
@@ -35,6 +36,32 @@ export const AUTH_INFO = {
     user: { id: 'user-uuid', name: 'Ada Lovelace', email: 'ada@example.com' },
     team: { name: 'Analytics', subdomain: 'analytics' },
 } as const
+
+/**
+ * Two v2 accounts on different Outline instances — Ada is the default, Bob the
+ * secondary — for exercising the `--user` selector. Tokens are plaintext
+ * fallbacks so the store resolves them without a live keyring.
+ */
+export const TWO_USER_CONFIG: Config = {
+    config_version: 2,
+    users: [
+        {
+            id: 'id-ada',
+            name: 'Ada',
+            base_url: 'https://ada.example.com',
+            oauth_client_id: 'cid-ada',
+            token: 'tok-ada',
+        },
+        {
+            id: 'id-bob',
+            name: 'Bob',
+            base_url: 'https://bob.example.com',
+            oauth_client_id: 'cid-bob',
+            token: 'tok-bob',
+        },
+    ],
+    default_user_id: 'id-ada',
+}
 
 /** Stand-in for a cli-core `migrateLegacyAuth` skip result. */
 export const SKIPPED_RESULT: MigrateAuthResult<OutlineAccount> = {
