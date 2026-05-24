@@ -1,7 +1,14 @@
-import { attachLoginCommand, attachLogoutCommand, attachStatusCommand } from '@doist/cli-core/auth'
+import { createInterface } from 'node:readline'
+import {
+    attachLoginCommand,
+    attachLogoutCommand,
+    attachStatusCommand,
+    attachTokenViewCommand,
+} from '@doist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'
+import { TOKEN_ENV_VAR } from '../lib/auth-constants.js'
 import { logClearResult, logTokenStorageResult } from '../lib/auth-output.js'
 import { renderError, renderSuccess } from '../lib/auth-pages.js'
 import {
@@ -11,9 +18,12 @@ import {
     getActiveTokenSource,
     type OutlineAccount,
     type OutlineTokenStore,
+    resolveBaseUrl,
 } from '../lib/auth-provider.js'
 import { refreshedTokenForStatus } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
+import { isJsonMode } from '../lib/global-args.js'
+import { makeOutlineAccount } from '../lib/outline-account.js'
 import { withUserRefAware } from '../lib/user-ref-store.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
@@ -31,6 +41,85 @@ function resolvePreferredCallbackPort(): number {
         return DEFAULT_OAUTH_CALLBACK_PORT
     }
     return parsed
+}
+
+// Read a secret without echoing it. Node exposes no public masked-prompt API,
+// so we override readline's private `_writeToOutput` to suppress keystrokes and
+// echo only the prompt label. Output goes to stderr so a `--json` stdout stays clean.
+function promptHiddenToken(question: string): Promise<string> {
+    return new Promise((resolve) => {
+        const rl = createInterface({ input: process.stdin, output: process.stderr })
+        const internal = rl as unknown as { _writeToOutput?: (str: string) => void }
+        const original = internal._writeToOutput?.bind(rl)
+        internal._writeToOutput = (str: string) => {
+            if (original && str.includes(question)) original(question)
+        }
+        rl.question(question, (answer) => {
+            rl.close()
+            process.stderr.write('\n')
+            resolve(answer.trim())
+        })
+    })
+}
+
+async function saveToken(
+    store: OutlineTokenStore,
+    token: string | undefined,
+    options: { baseUrl?: string },
+): Promise<void> {
+    if (!token) {
+        if (!process.stdin.isTTY) {
+            throw new CliError('NO_TOKEN', 'No token provided', [
+                'Pass it as an argument: ol auth token <token>',
+                'Or set the OUTLINE_API_TOKEN environment variable',
+                'Or use OAuth: ol auth login',
+            ])
+        }
+        token = await promptHiddenToken('API token: ')
+    }
+    const trimmed = token.trim()
+    if (!trimmed) throw new CliError('NO_TOKEN', 'No token provided')
+
+    const baseUrl = await resolveBaseUrl({ baseUrl: options.baseUrl })
+
+    // A freshly pasted token is verified by probing `auth.info`. Any failure
+    // (bad token, wrong instance, unreachable host) means we can't trust it, so
+    // surface a single actionable error rather than leaking the raw API string.
+    let data: AuthInfoResponse
+    try {
+        ;({ data } = await apiRequest<AuthInfoResponse>(
+            'auth.info',
+            {},
+            { token: trimmed, baseUrl },
+        ))
+    } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err)
+        throw new CliError('AUTH_VERIFICATION_FAILED', `Could not verify token (${detail})`, [
+            'Check the token value',
+            `Check --base-url matches the instance the token came from (used: ${baseUrl})`,
+        ])
+    }
+
+    const account = makeOutlineAccount({
+        id: data.user.id,
+        label: data.user.name,
+        baseUrl,
+        teamName: data.team.name,
+    })
+    await store.set(account, trimmed)
+
+    const machine = isJsonMode()
+    if (!machine) {
+        console.log(chalk.green('✓'), `Saved token for ${account.label} (${account.teamName})`)
+    }
+    const result = store.getLastStorageResult()
+    if (result) {
+        logTokenStorageResult(
+            result,
+            'Token stored securely in the system credential manager',
+            machine,
+        )
+    }
 }
 
 export function registerAuthCommand(program: Command): void {
@@ -151,5 +240,21 @@ export function registerAuthCommand(program: Command): void {
         onCleared({ view }) {
             logClearResult(store, view.json || view.ndjson)
         },
+    })
+
+    const tokenCmd = auth
+        .command('token [token]')
+        .description('Save an Outline API token for CLI auth (or use the `view` subcommand)')
+        .option('--base-url <url>', 'Outline base URL the token belongs to')
+        .action((token: string | undefined, options: { baseUrl?: string }) =>
+            saveToken(store, token, options),
+        )
+
+    attachTokenViewCommand<OutlineAccount>(tokenCmd, {
+        name: 'view',
+        store: refAware,
+        envVarName: TOKEN_ENV_VAR,
+        description:
+            'Print the stored token for the active user (or --user <ref>) to stdout for scripts',
     })
 }

@@ -42,7 +42,7 @@ async function prompt(question: string): Promise<string> {
     }
 }
 
-async function resolveBaseUrl(flags: Record<string, unknown>): Promise<string> {
+export async function resolveBaseUrl(flags: Record<string, unknown>): Promise<string> {
     const fromFlag = stringFlag(flags, 'baseUrl')
     if (fromFlag) return fromFlag.replace(/\/$/, '')
     const fromEnv = process.env.OUTLINE_URL?.trim()

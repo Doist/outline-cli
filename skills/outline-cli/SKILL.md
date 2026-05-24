@@ -88,6 +88,11 @@ ol auth status                         # Show current auth state
 ol auth status --json | --ndjson       # Machine-readable status envelope ({id, team, baseUrl, source})
 ol auth logout                         # Clear saved credentials
 ol auth logout --json | --ndjson       # Machine-readable logout envelope ({ok: true}; --ndjson is silent)
+ol auth token <token>                  # Save a personal API token (validates via auth.info, resolves identity)
+ol auth token <token> --base-url <url> # Save a token for a specific Outline instance
+ol auth token                          # Prompt for the token (hidden input; errors in non-interactive shells)
+ol auth token view                     # Print the bare stored token to stdout for scripts (no newline when piped)
+ol auth token view --user <id|name>    # Print a specific stored account's token; refuses when OUTLINE_API_TOKEN is set
 ```
 
 ### Accounts
