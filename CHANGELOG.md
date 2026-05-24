@@ -1,3 +1,9 @@
+## [1.10.0](https://github.com/Doist/outline-cli/compare/v1.9.0...v1.10.0) (2026-05-24)
+
+### Features
+
+* **auth:** add `token` command group (save + view) ([#80](https://github.com/Doist/outline-cli/issues/80)) ([99789cc](https://github.com/Doist/outline-cli/commit/99789cc48b9afa9fc53959427f9121f8d3c12cd9))
+
 ## [1.9.0](https://github.com/Doist/outline-cli/compare/v1.8.0...v1.9.0) (2026-05-24)
 
 ### Features
