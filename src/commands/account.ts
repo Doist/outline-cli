@@ -1,7 +1,5 @@
 import { emitView } from '@doist/cli-core'
 import {
-    type AccountRef,
-    attachAccountCurrentCommand,
     attachAccountListCommand,
     attachAccountRemoveCommand,
     attachAccountUseCommand,
@@ -13,7 +11,6 @@ import { logClearResult } from '../lib/auth-output.js'
 import {
     createOutlineTokenStore,
     type OutlineAccount,
-    type OutlineTokenStore,
     resolveActiveAccountSource,
 } from '../lib/auth-provider.js'
 import { CliError } from '../lib/errors.js'
@@ -34,45 +31,6 @@ function projectAccount(account: OutlineAccount, isDefault: boolean) {
         baseUrl: account.baseUrl,
         isDefault,
     }
-}
-
-/**
- * Adapt the authoritative `resolveActiveAccountSource` to the `activeAccount`
- * contract cli-core's `current` attacher consumes: a stored account resolves
- * normally; the out-of-store env/legacy sources resolve to `null` (their source
- * stashed for `onNotAuthenticated` to render) so they aren't shown as accounts.
- * A `--user`/positional ref that matches nothing surfaces as `ACCOUNT_NOT_FOUND`,
- * matching the global `--user` selector elsewhere.
- */
-function currentResolverStore(store: OutlineTokenStore): {
-    store: OutlineTokenStore
-    getSource: () => 'env' | 'legacy' | undefined
-} {
-    let source: 'env' | 'legacy' | undefined
-    const wrapped: OutlineTokenStore = {
-        ...store,
-        activeAccount: async (ref?: AccountRef) => {
-            source = undefined
-            const requested = ref ?? getRequestedUserRef()
-            const resolution = await resolveActiveAccountSource(requested)
-            if (resolution?.source === 'stored') {
-                return { account: resolution.account, isDefault: resolution.isDefault }
-            }
-            if (resolution) {
-                source = resolution.source
-                return null
-            }
-            if (requested !== undefined) {
-                throw new CliError(
-                    'ACCOUNT_NOT_FOUND',
-                    `No stored account matches "${requested}".`,
-                    ['Check the account id or display name, or run `ol auth login` to add it.'],
-                )
-            }
-            return null
-        },
-    }
-    return { store: wrapped, getSource: () => source }
 }
 
 export function registerAccountCommand(program: Command): void {
@@ -96,36 +54,52 @@ export function registerAccountCommand(program: Command): void {
         description: 'Set the default account (matched by Outline user id or display name)',
     })
 
-    const { store: currentStore, getSource } = currentResolverStore(store)
-    attachAccountCurrentCommand<OutlineAccount>(account, {
-        store: currentStore,
-        description: 'Show the active account (honours --user and OUTLINE_API_TOKEN)',
-        renderText: ({ account, isDefault }) => {
-            const lines = [accountLine(account, isDefault), `  Base URL: ${account.baseUrl}`]
-            if (account.teamName) lines.push(`  Team: ${account.teamName}`)
-            return lines
-        },
-        renderJson: ({ account, isDefault }) => ({
-            source: 'stored',
-            account: projectAccount(account, isDefault),
-        }),
-        onNotAuthenticated({ view }) {
-            const source = getSource()
-            if (source === 'env') {
+    // `current` resolves the active credential's source directly (env / stored /
+    // legacy) rather than going through the generic account attacher, which only
+    // models stored accounts. `--json` / `--ndjson` emit a discriminated envelope.
+    account
+        .command('current')
+        .description('Show the active account (honours --user and OUTLINE_API_TOKEN)')
+        .option('--json', 'Emit machine-readable JSON output')
+        .option('--ndjson', 'Emit machine-readable NDJSON output')
+        .action(async (options: { json?: boolean; ndjson?: boolean }) => {
+            const view = { json: Boolean(options.json), ndjson: Boolean(options.ndjson) }
+            const requested = getRequestedUserRef()
+            const resolution = await resolveActiveAccountSource(requested)
+            if (resolution?.source === 'stored') {
+                const { account: acc, isDefault } = resolution
+                emitView(
+                    view,
+                    { source: 'stored', account: projectAccount(acc, isDefault) },
+                    () => {
+                        const lines = [accountLine(acc, isDefault), `  Base URL: ${acc.baseUrl}`]
+                        if (acc.teamName) lines.push(`  Team: ${acc.teamName}`)
+                        return lines
+                    },
+                )
+                return
+            }
+            if (resolution?.source === 'env') {
                 emitView(view, { source: 'env' }, () => [
                     `Using ${TOKEN_ENV_VAR} environment variable (no stored account).`,
                 ])
                 return
             }
-            if (source === 'legacy') {
+            if (resolution?.source === 'legacy') {
                 emitView(view, { source: 'legacy' }, () => [
                     'Using legacy single-user credentials. Run `ol auth login` to migrate to a stored account.',
                 ])
                 return
             }
+            if (requested !== undefined) {
+                throw new CliError(
+                    'ACCOUNT_NOT_FOUND',
+                    `No stored account matches "${requested}".`,
+                    ['Check the account id or display name, or run `ol auth login` to add it.'],
+                )
+            }
             throw new CliError('NOT_AUTHENTICATED', 'Not authenticated. Run: ol auth login')
-        },
-    })
+        })
 
     attachAccountRemoveCommand<OutlineAccount>(account, {
         store,
