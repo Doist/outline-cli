@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
 import packageJson from '../package.json' with { type: 'json' }
+import { registerAccountCommand } from './commands/account.js'
 import { registerAuthCommand } from './commands/auth.js'
 import { registerChangelogCommand } from './commands/changelog.js'
 import { registerCollectionCommand } from './commands/collection.js'
@@ -33,6 +34,7 @@ Note for AI/LLM agents:
     )
 
 registerAuthCommand(program)
+registerAccountCommand(program)
 registerSearchCommand(program)
 registerDocumentCommand(program)
 registerCollectionCommand(program)

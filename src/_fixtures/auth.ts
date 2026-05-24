@@ -11,6 +11,15 @@ export const STORED_ACCOUNT: OutlineAccount = {
     teamName: 'Analytics',
 }
 
+/** Secondary persisted `OutlineAccount` on a different instance — for multi-account tests. */
+export const STORED_ACCOUNT_BOB: OutlineAccount = {
+    id: 'bob-uuid',
+    label: 'Bob',
+    baseUrl: 'https://bob.example.com',
+    oauthClientId: 'cid-bob',
+    teamName: 'Engineering',
+}
+
 /** v1 plaintext config snapshot that round-trips to `STORED_ACCOUNT`. */
 export const LEGACY_CONFIG = {
     api_token: 'tk_legacy_plaintext',

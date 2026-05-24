@@ -261,7 +261,7 @@ describe('logTokenStorageResult', () => {
     it('prints the secure-store confirmation to stdout in human mode', async () => {
         const log = captureConsole()
         const errorSpy = captureConsole('error')
-        const { logTokenStorageResult } = await import('./auth.js')
+        const { logTokenStorageResult } = await import('../lib/auth-output.js')
 
         logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', false)
 
@@ -271,7 +271,7 @@ describe('logTokenStorageResult', () => {
 
     it('suppresses the stdout confirmation in machine-output mode', async () => {
         const log = captureConsole()
-        const { logTokenStorageResult } = await import('./auth.js')
+        const { logTokenStorageResult } = await import('../lib/auth-output.js')
 
         logTokenStorageResult({ storage: 'secure-store' }, 'Token stored securely', true)
 
@@ -281,7 +281,7 @@ describe('logTokenStorageResult', () => {
     it('routes the keyring-fallback warning to stderr (in both human and machine modes)', async () => {
         const log = captureConsole()
         const errorSpy = captureConsole('error')
-        const { logTokenStorageResult } = await import('./auth.js')
+        const { logTokenStorageResult } = await import('../lib/auth-output.js')
 
         logTokenStorageResult(
             { storage: 'config-file', warning: 'system credential manager unavailable' },
