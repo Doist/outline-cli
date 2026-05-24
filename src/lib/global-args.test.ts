@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BaseCliError } from './errors.js'
+import {
+    applyUserSelector,
+    getRequestedUserRef,
+    resetGlobalArgs,
+    validateRootUserFlag,
+} from './global-args.js'
 
 const COMMANDS = new Set([
     'auth',
@@ -11,90 +17,89 @@ const COMMANDS = new Set([
     'update',
 ])
 
-async function load(argv: string[]) {
-    process.argv = ['node', 'ol', ...argv]
-    const mod = await import('./global-args.js')
-    mod.resetGlobalArgs()
-    return mod
+// The global-args store reads `process.argv` lazily and caches the result, so
+// each case sets argv then clears the cache. (Static import is fine: this file
+// doesn't use `vi.resetModules()`, so a dynamic import would return the same
+// module instance anyway.)
+function setArgv(...args: string[]) {
+    process.argv = ['node', 'ol', ...args]
+    resetGlobalArgs()
 }
 
-describe('getRequestedUserRef', () => {
-    beforeEach(() => {
-        process.argv = ['node', 'ol']
-    })
-    afterEach(() => {
-        process.argv = ['node', 'ol']
-    })
+beforeEach(() => setArgv())
+afterEach(() => setArgv())
 
-    it('resolves the space form', async () => {
-        const { getRequestedUserRef } = await load(['--user', 'scott', 'document', 'list'])
+describe('getRequestedUserRef', () => {
+    it('resolves the space form', () => {
+        setArgv('--user', 'scott', 'document', 'list')
         expect(getRequestedUserRef()).toBe('scott')
     })
 
-    it('resolves the = form', async () => {
-        const { getRequestedUserRef } = await load(['--user=scott@example.com', 'document', 'list'])
+    it('resolves the = form', () => {
+        setArgv('--user=scott@example.com', 'document', 'list')
         expect(getRequestedUserRef()).toBe('scott@example.com')
     })
 
-    it('is undefined when absent', async () => {
-        const { getRequestedUserRef } = await load(['document', 'list'])
+    it('is undefined when absent', () => {
+        setArgv('document', 'list')
         expect(getRequestedUserRef()).toBeUndefined()
     })
 })
 
 describe('validateRootUserFlag', () => {
-    beforeEach(() => {
-        process.argv = ['node', 'ol']
-    })
-    afterEach(() => {
-        process.argv = ['node', 'ol']
-    })
-
-    it('passes a valid ref', async () => {
-        const { validateRootUserFlag } = await load([])
+    it('passes a valid ref', () => {
         expect(() =>
             validateRootUserFlag(['--user', 'scott', 'document', 'list'], COMMANDS),
         ).not.toThrow()
     })
 
-    it('is silent when --user is absent', async () => {
-        const { validateRootUserFlag } = await load([])
+    it('is silent when --user is absent', () => {
         expect(() => validateRootUserFlag(['document', 'list'], COMMANDS)).not.toThrow()
     })
 
-    it('errors on a bare --user', async () => {
-        const { validateRootUserFlag } = await load([])
+    it('ignores a --user that appears after a command (left for Commander)', () => {
+        // Late flag: stripUserFlag won't remove it, so Commander reports the
+        // unknown option — the validator must not pre-empt with its own error.
+        expect(() => validateRootUserFlag(['document', '--user'], COMMANDS)).not.toThrow()
+        expect(() =>
+            validateRootUserFlag(['document', 'list', '--user', 'scott'], COMMANDS),
+        ).not.toThrow()
+    })
+
+    it('errors on a bare --user', () => {
         expect(() => validateRootUserFlag(['--user'], COMMANDS)).toThrow(BaseCliError)
     })
 
-    it('errors on an empty --user=', async () => {
-        const { validateRootUserFlag } = await load([])
+    it('errors on an empty --user=', () => {
         expect(() => validateRootUserFlag(['--user=', 'document'], COMMANDS)).toThrow(BaseCliError)
     })
 
-    it('errors when the value is a command name (forgotten value)', async () => {
-        const { validateRootUserFlag } = await load([])
-        let caught: unknown
-        try {
-            validateRootUserFlag(['--user', 'document', 'list'], COMMANDS)
-        } catch (err) {
-            caught = err
-        }
-        expect(caught).toBeInstanceOf(BaseCliError)
-        expect((caught as { code: string }).code).toBe('INVALID_USER_FLAG')
+    it('errors when the value is a command name (forgotten value)', () => {
+        expect(() => validateRootUserFlag(['--user', 'document', 'list'], COMMANDS)).toThrow(
+            expect.objectContaining({ code: 'INVALID_USER_FLAG' }),
+        )
     })
 })
 
-describe('cache warm before strip', () => {
-    afterEach(() => {
-        process.argv = ['node', 'ol']
+describe('applyUserSelector (entrypoint flow)', () => {
+    it('validates, warms the cache, then strips --user from argv', () => {
+        setArgv('--user', 'scott', 'document', 'list')
+        applyUserSelector(COMMANDS)
+        // Ref survives because the cache was warmed before the strip...
+        expect(getRequestedUserRef()).toBe('scott')
+        // ...and Commander sees argv without the root --user.
+        expect(process.argv.slice(2)).toEqual(['document', 'list'])
     })
 
-    it('keeps the ref after process.argv is rewritten without --user', async () => {
-        const { getRequestedUserRef } = await load(['--user', 'scott', 'document', 'list'])
-        // Warm, then simulate index.ts stripping --user from argv.
-        expect(getRequestedUserRef()).toBe('scott')
-        process.argv = ['node', 'ol', 'document', 'list']
-        expect(getRequestedUserRef()).toBe('scott')
+    it('throws before stripping when the root flag is malformed', () => {
+        setArgv('--user')
+        expect(() => applyUserSelector(COMMANDS)).toThrow(BaseCliError)
+    })
+
+    it('is a no-op for argv without --user', () => {
+        setArgv('document', 'list')
+        applyUserSelector(COMMANDS)
+        expect(getRequestedUserRef()).toBeUndefined()
+        expect(process.argv.slice(2)).toEqual(['document', 'list'])
     })
 })

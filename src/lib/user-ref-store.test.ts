@@ -8,29 +8,40 @@ import { withUserRefAware } from './user-ref-store.js'
 const ADA = makeOutlineAccount({ id: 'id-ada', label: 'Ada' })
 const BOB = makeOutlineAccount({ id: 'id-bob', label: 'Bob' })
 
+/**
+ * Minimal store double. `activeAccount` resolves a match (the wrap's existence
+ * probe); the other methods record the ref they were ultimately called with so
+ * tests can assert the substituted/forwarded value.
+ */
 function fakeStore(accounts: OutlineAccount[]) {
-    const calls: { method: string; ref?: string }[] = []
+    const seen: Record<string, string | undefined> = {}
+    const match = (ref?: string) =>
+        ref === undefined
+            ? accounts[0]
+            : accounts.find((a) => a.id === ref || a.label.toLowerCase() === ref.toLowerCase())
     const store = {
-        list: async () =>
-            accounts.map((account) => ({ account, isDefault: account === accounts[0] })),
+        activeAccount: async (ref?: string) => {
+            seen.activeAccount = ref
+            const account = match(ref)
+            return account ? { account, isDefault: account === accounts[0] } : null
+        },
         active: async (ref?: string) => {
-            calls.push({ method: 'active', ref })
-            return { token: `tok:${ref ?? 'default'}`, account: accounts[0] }
+            seen.active = ref
+            const account = match(ref)
+            return account ? { token: `tok:${ref ?? 'default'}`, account } : null
         },
         activeBundle: async (ref?: string) => {
-            calls.push({ method: 'activeBundle', ref })
-            return null
-        },
-        activeAccount: async (ref?: string) => {
-            calls.push({ method: 'activeAccount', ref })
-            return null
+            seen.activeBundle = ref
+            const account = match(ref)
+            return account ? { account, bundle: { accessToken: `tok:${ref ?? 'default'}` } } : null
         },
         clear: async (ref?: string) => {
-            calls.push({ method: 'clear', ref })
-            return null
+            seen.clear = ref
+            const account = match(ref)
+            return account ? { account, wasDefault: account === accounts[0] } : null
         },
     }
-    return { store: store as unknown as OutlineTokenStore, calls }
+    return { store: store as unknown as OutlineTokenStore, seen }
 }
 
 function setUserFlag(ref?: string) {
@@ -48,49 +59,47 @@ describe('withUserRefAware', () => {
     })
 
     it('passes undefined through when no --user is set', async () => {
-        const { store, calls } = fakeStore([ADA, BOB])
+        const { store, seen } = fakeStore([ADA, BOB])
         await withUserRefAware(store).active()
-        expect(calls).toEqual([{ method: 'active', ref: undefined }])
+        expect(seen.active).toBeUndefined()
+        // No existence probe when there's nothing to resolve.
+        expect(seen.activeAccount).toBeUndefined()
     })
 
     it('substitutes the global --user ref on a no-arg call', async () => {
         setUserFlag('Bob')
-        const { store, calls } = fakeStore([ADA, BOB])
-        await withUserRefAware(store).active()
-        expect(calls).toEqual([{ method: 'active', ref: 'Bob' }])
+        const { store, seen } = fakeStore([ADA, BOB])
+        const snapshot = await withUserRefAware(store).active()
+        expect(seen.active).toBe('Bob')
+        expect(snapshot?.token).toBe('tok:Bob')
     })
 
     it('lets an explicit ref win over the global --user', async () => {
         setUserFlag('Bob')
-        const { store, calls } = fakeStore([ADA, BOB])
+        const { store, seen } = fakeStore([ADA, BOB])
         await withUserRefAware(store).active('id-ada')
-        expect(calls).toEqual([{ method: 'active', ref: 'id-ada' }])
+        expect(seen.active).toBe('id-ada')
     })
 
     it('throws ACCOUNT_NOT_FOUND when the global ref matches nothing', async () => {
         setUserFlag('nobody')
         const { store } = fakeStore([ADA, BOB])
-        let caught: unknown
-        try {
-            await withUserRefAware(store).active()
-        } catch (err) {
-            caught = err
-        }
-        expect(caught).toBeInstanceOf(BaseCliError)
-        expect((caught as { code: string }).code).toBe('ACCOUNT_NOT_FOUND')
+        await expect(withUserRefAware(store).active()).rejects.toMatchObject({
+            code: 'ACCOUNT_NOT_FOUND',
+        })
+        // And it is a typed CliError, not a bare Error.
+        await expect(withUserRefAware(store).active()).rejects.toBeInstanceOf(BaseCliError)
     })
 
     it('applies the ref to activeBundle, activeAccount, and clear too', async () => {
         setUserFlag('Ada')
-        const { store, calls } = fakeStore([ADA, BOB])
+        const { store, seen } = fakeStore([ADA, BOB])
         const wrapped = withUserRefAware(store)
         await wrapped.activeBundle()
         await wrapped.activeAccount()
         await wrapped.clear()
-        expect(calls).toEqual([
-            { method: 'activeBundle', ref: 'Ada' },
-            { method: 'activeAccount', ref: 'Ada' },
-            { method: 'clear', ref: 'Ada' },
-        ])
+        expect(seen.activeBundle).toBe('Ada')
+        expect(seen.activeAccount).toBe('Ada')
+        expect(seen.clear).toBe('Ada')
     })
 })

@@ -125,7 +125,11 @@ export function registerAuthCommand(program: Command): void {
                         {},
                         { token: liveToken, baseUrl: account.baseUrl },
                     ),
-                    getActiveTokenSource(),
+                    // Scope the source to the selected account so `auth status
+                    // --user <ref>` reports where *that* account's token lives,
+                    // not the default/env source. Empty id (env/legacy snapshot)
+                    // falls back to the default cascade.
+                    getActiveTokenSource(account.id || undefined),
                 ])
                 statusData = { email: info.user.email, source }
                 return {

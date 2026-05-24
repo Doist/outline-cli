@@ -1,7 +1,9 @@
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { TOKEN_ENV_VAR } from './auth-constants.js'
-import { getApiToken, getBaseUrl, proactiveRefresh, reactiveRefresh } from './auth.js'
+import { getApiToken, getRequestContext, proactiveRefresh, reactiveRefresh } from './auth.js'
 import { type SpinnerOptions, withSpinner } from './spinner.js'
+
+type RefreshHandshake = { baseUrl: string; clientId: string }
 
 /**
  * Spinner configuration mapping API paths to spinner options.
@@ -58,11 +60,16 @@ export type ApiRequestOverrides = {
  * On the managed path, prefer the token `proactiveRefresh` resolved (rotated
  * or current) so unrefreshable/access-only accounts stay on a single store
  * read; only fall back to `getApiToken` when proactive refresh bows out.
+ * `handshake` pins the refresh to the `--user` account's instance.
  */
-async function resolveRequestToken(managed: boolean, override?: string): Promise<string> {
+async function resolveRequestToken(
+    managed: boolean,
+    override?: string,
+    handshake?: RefreshHandshake,
+): Promise<string> {
     if (override) return override
     if (managed) {
-        const refreshed = await proactiveRefresh()
+        const refreshed = await proactiveRefresh(handshake)
         if (refreshed) return refreshed
     }
     return getApiToken()
@@ -80,11 +87,21 @@ async function rawApiRequest<T>(
     // override or the `OUTLINE_API_TOKEN` env var is taken as-is.
     const managed = !overrides.token && !process.env[TOKEN_ENV_VAR]?.trim()
 
-    // Resolve the base URL and the (proactively refreshed) token in parallel.
-    const [resolvedBaseUrl, resolvedToken] = await Promise.all([
-        overrides.baseUrl ? Promise.resolve(overrides.baseUrl.replace(/\/$/, '')) : getBaseUrl(),
-        resolveRequestToken(managed, overrides.token),
-    ])
+    // A caller-supplied base URL (login validate, auth status) skips account
+    // resolution — those paths pass an explicit token, so no refresh runs.
+    // Otherwise resolve the request's base URL and, for a `--user` account, the
+    // refresh handshake that keeps rotation pinned to that account's instance.
+    let resolvedBaseUrl: string
+    let handshake: RefreshHandshake | undefined
+    if (overrides.baseUrl) {
+        resolvedBaseUrl = overrides.baseUrl.replace(/\/$/, '')
+    } else {
+        const ctx = await getRequestContext()
+        resolvedBaseUrl = ctx.baseUrl
+        handshake = ctx.handshake
+    }
+
+    const resolvedToken = await resolveRequestToken(managed, overrides.token, handshake)
 
     const performRequest = (token: string) =>
         fetchWithRetry({
@@ -104,7 +121,7 @@ async function rawApiRequest<T>(
     // Reactive path: a 401 on a managed token triggers a forced rotation and
     // a single retry. `reactiveRefresh` throws `NoTokenError` when the refresh
     // token is gone, so an unrecoverable 401 surfaces the re-login hint.
-    if (res.status === 401 && managed && (await reactiveRefresh())) {
+    if (res.status === 401 && managed && (await reactiveRefresh(handshake))) {
         res = await performRequest(await getApiToken())
     }
 

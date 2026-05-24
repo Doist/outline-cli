@@ -22,6 +22,10 @@ All list commands support:
 - \`--ndjson\` - Newline-delimited JSON (streaming)
 - \`--full\` - Include all fields in JSON
 
+## Global Options
+
+- \`--user <id|name>\` - Act as a specific stored account, matched by Outline user ID or display name. Each \`ol auth login\` stores an account (accounts can live on different Outline instances), and \`--user\` selects which one a command runs as; the token, base URL, and OAuth client ID all resolve from that account. Must be placed **before** the command, e.g. \`ol --user scott@example.com doc list\`. Omitted, commands use the default account. Overridden by \`OUTLINE_API_TOKEN\` when set.
+
 ## Document References
 
 Documents can be referenced by:

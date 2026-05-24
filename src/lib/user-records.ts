@@ -67,8 +67,11 @@ export function recordForRef(
     ref?: AccountRef,
 ): UserRecord<OutlineAccount> | null {
     if (ref === undefined) return getDefaultUserRecord(config)
-    const user = (config.users ?? []).find((u) => matchOutlineAccount(toRecord(u).account, ref))
-    return user ? toRecord(user) : null
+    for (const user of config.users ?? []) {
+        const record = toRecord(user)
+        if (matchOutlineAccount(record.account, ref)) return record
+    }
+    return null
 }
 
 function toRecord(user: StoredUser): UserRecord<OutlineAccount> {
