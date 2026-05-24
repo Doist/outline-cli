@@ -1,19 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureConsole } from '@doist/cli-core/testing'
+import { type MockInstance, beforeEach, describe, expect, it } from 'vitest'
 import { BaseCliError } from './errors.js'
 import { formatError, formatErrorJson, getOutputOptions, outputItem, outputList } from './output.js'
 
 describe('output', () => {
-    let logs: string[]
+    let log: MockInstance
+    const lines = () => log.mock.calls.map((args) => args.join(' '))
 
     beforeEach(() => {
-        logs = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
-    })
-
-    afterEach(() => {
-        vi.restoreAllMocks()
+        log = captureConsole()
     })
 
     const item = { id: '1', name: 'Test', extra: 'hidden' }
@@ -22,24 +17,24 @@ describe('output', () => {
 
     it('outputItem human mode', () => {
         outputItem(item, formatter, keys)
-        expect(logs[0]).toBe('Test (1)')
+        expect(lines()[0]).toBe('Test (1)')
     })
 
     it('outputItem json mode shows essential keys only', () => {
         outputItem(item, formatter, keys, { json: true })
-        const parsed = JSON.parse(logs[0])
+        const parsed = JSON.parse(lines()[0])
         expect(parsed).toEqual({ id: '1', name: 'Test' })
     })
 
     it('outputItem json full mode shows all keys', () => {
         outputItem(item, formatter, keys, { json: true, full: true })
-        const parsed = JSON.parse(logs[0])
+        const parsed = JSON.parse(lines()[0])
         expect(parsed).toEqual({ id: '1', name: 'Test', extra: 'hidden' })
     })
 
     it('outputList ndjson mode', () => {
         outputList([item, { ...item, id: '2' }], formatter, keys, { ndjson: true })
-        const records = logs
+        const records = lines()
             .flatMap((line) => line.split('\n'))
             .filter(Boolean)
             .map((line) => JSON.parse(line))

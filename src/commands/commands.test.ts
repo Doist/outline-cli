@@ -1,5 +1,5 @@
-import { Command } from 'commander'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
+import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
@@ -14,13 +14,11 @@ vi.mock('../lib/api.js', () => ({
 }))
 
 describe('search command', () => {
-    let logs: string[]
+    let log: MockInstance
+    const lines = () => log.mock.calls.map((args) => args.join(' '))
 
     beforeEach(() => {
-        logs = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        log = captureConsole()
     })
 
     afterEach(() => {
@@ -46,9 +44,7 @@ describe('search command', () => {
         })
 
         const { registerSearchCommand } = await import('./search.js')
-        const program = new Command()
-        program.exitOverride()
-        registerSearchCommand(program)
+        const program = createTestProgram(registerSearchCommand)
 
         await program.parseAsync(['node', 'ol', 'search', 'test query', '--limit', '10'])
 
@@ -76,25 +72,21 @@ describe('search command', () => {
         })
 
         const { registerSearchCommand } = await import('./search.js')
-        const program = new Command()
-        program.exitOverride()
-        registerSearchCommand(program)
+        const program = createTestProgram(registerSearchCommand)
 
         await program.parseAsync(['node', 'ol', 'search', 'test', '--json'])
 
-        const parsed = JSON.parse(logs[0])
+        const parsed = JSON.parse(lines()[0])
         expect(parsed[0].document.title).toBe('Test')
     })
 })
 
 describe('document commands', () => {
-    let logs: string[]
+    let log: MockInstance
+    const lines = () => log.mock.calls.map((args) => args.join(' '))
 
     beforeEach(() => {
-        logs = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        log = captureConsole()
     })
 
     afterEach(() => {
@@ -115,15 +107,13 @@ describe('document commands', () => {
         })
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await program.parseAsync(['node', 'ol', 'document', 'get', 'my-doc-abc123'])
 
         expect(apiRequest).toHaveBeenCalledWith('documents.info', { id: 'abc123' })
-        expect(logs[0]).toContain('My Doc')
-        expect(logs[0]).toContain('Hello world')
+        expect(lines()[0]).toContain('My Doc')
+        expect(lines()[0]).toContain('Hello world')
     })
 
     it('document list passes pagination options', async () => {
@@ -134,9 +124,7 @@ describe('document commands', () => {
         })
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await program.parseAsync([
             'node',
@@ -187,9 +175,7 @@ describe('document commands', () => {
         })
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await program.parseAsync([
             'node',
@@ -213,15 +199,10 @@ describe('document commands', () => {
         const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
             throw new Error(`process.exit(${code})`)
         })
-        const errors: string[] = []
-        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-            errors.push(args.join(' '))
-        })
+        const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await expect(
             program.parseAsync([
@@ -238,7 +219,7 @@ describe('document commands', () => {
             ]),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errors.join(' ')).toContain('mutually exclusive')
+        expect(errorSpy.mock.calls.flat().join(' ')).toContain('mutually exclusive')
         mockExit.mockRestore()
     })
 
@@ -264,9 +245,7 @@ describe('document commands', () => {
         })
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await program.parseAsync([
             'node',
@@ -289,15 +268,10 @@ describe('document commands', () => {
         const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
             throw new Error(`process.exit(${code})`)
         })
-        const errors: string[] = []
-        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-            errors.push(args.join(' '))
-        })
+        const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await expect(
             program.parseAsync([
@@ -313,7 +287,7 @@ describe('document commands', () => {
             ]),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errors.join(' ')).toContain('mutually exclusive')
+        expect(errorSpy.mock.calls.flat().join(' ')).toContain('mutually exclusive')
         mockExit.mockRestore()
     })
 
@@ -321,22 +295,17 @@ describe('document commands', () => {
         const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
             throw new Error(`process.exit(${code})`)
         })
-        const errors: string[] = []
-        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-            errors.push(args.join(' '))
-        })
+        const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await expect(
             program.parseAsync(['node', 'ol', 'document', 'move', 'docABC1']),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errors.join(' ')).toContain('--collection')
-        expect(errors.join(' ')).toContain('--parent')
+        expect(errorSpy.mock.calls.flat().join(' ')).toContain('--collection')
+        expect(errorSpy.mock.calls.flat().join(' ')).toContain('--parent')
         mockExit.mockRestore()
     })
 
@@ -361,15 +330,10 @@ describe('document commands', () => {
         const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
             throw new Error(`process.exit(${code})`)
         })
-        const errors: string[] = []
-        vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-            errors.push(args.join(' '))
-        })
+        const errorSpy = captureConsole('error')
 
         const { registerDocumentCommand } = await import('./document.js')
-        const program = new Command()
-        program.exitOverride()
-        registerDocumentCommand(program)
+        const program = createTestProgram(registerDocumentCommand)
 
         await expect(
             program.parseAsync([
@@ -383,19 +347,14 @@ describe('document commands', () => {
             ]),
         ).rejects.toThrow('process.exit(1)')
 
-        expect(errors.join(' ')).toContain('cannot be its own parent')
+        expect(errorSpy.mock.calls.flat().join(' ')).toContain('cannot be its own parent')
         mockExit.mockRestore()
     })
 })
 
 describe('collection commands', () => {
-    let logs: string[]
-
     beforeEach(() => {
-        logs = []
-        vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-            logs.push(args.join(' '))
-        })
+        captureConsole()
     })
 
     afterEach(() => {
@@ -409,9 +368,7 @@ describe('collection commands', () => {
         })
 
         const { registerCollectionCommand } = await import('./collection.js')
-        const program = new Command()
-        program.exitOverride()
-        registerCollectionCommand(program)
+        const program = createTestProgram(registerCollectionCommand)
 
         await program.parseAsync(['node', 'ol', 'collection', 'list'])
 
