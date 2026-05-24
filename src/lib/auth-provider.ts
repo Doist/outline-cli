@@ -14,10 +14,11 @@ import { LEGACY_CLEAR_PAYLOAD, SECURE_STORE_SERVICE, TOKEN_ENV_VAR } from './aut
 import { getBaseUrl, getOAuthClientId } from './auth.js'
 import { getConfig, getConfigPath, updateConfig } from './config.js'
 import { runMigrateLegacyAuth } from './migrate-auth.js'
-import { makeOutlineAccount, type OutlineAccount } from './outline-account.js'
-import { createOutlineUserRecordStore, getDefaultUserRecord } from './user-records.js'
+import { makeOutlineAccount, matchOutlineAccount, type OutlineAccount } from './outline-account.js'
+import { createOutlineUserRecordStore, getDefaultUserRecord, recordForRef } from './user-records.js'
 
 export type { OutlineAccount } from './outline-account.js'
+export { matchOutlineAccount } from './outline-account.js'
 
 export type AuthInfoResponse = {
     user: { id: string; name: string; email: string }
@@ -120,16 +121,6 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
         },
         fetchImpl: outlineFetch,
     })
-}
-
-/**
- * Accepts the Outline user UUID or display name. Id matches are
- * case-sensitive (UUIDs are canonical); label matches are
- * case-insensitive so users can pass the name they see in `auth status`.
- */
-export function matchOutlineAccount(account: OutlineAccount, ref: AccountRef): boolean {
-    if (account.id === ref) return true
-    return account.label.toLowerCase() === ref.toLowerCase()
 }
 
 /** True when the v2 store is the authoritative source. */
@@ -286,6 +277,13 @@ export function createOutlineTokenStore(): OutlineTokenStore {
                 (token, account) => ({ token, account }),
             )
         },
+        activeAccount(ref?: AccountRef) {
+            return resolveAuth(
+                ref,
+                () => inner.activeAccount(ref),
+                (_token, account) => ({ account, isDefault: true }),
+            )
+        },
         activeBundle(ref?: AccountRef) {
             return resolveAuth(
                 ref,
@@ -301,12 +299,13 @@ export function createOutlineTokenStore(): OutlineTokenStore {
         },
         async clear(ref?: AccountRef) {
             await ensureMigrated()
-            await inner.clear(ref)
+            const cleared = await inner.clear(ref)
             if (await migrationIsInconclusive()) {
                 // Must succeed: v2 is now empty, so a surviving legacy
                 // token would shadow the logout via the fallback.
                 await dischargeLegacyState()
             }
+            return cleared
         },
         async list() {
             await ensureMigrated()
@@ -326,6 +325,11 @@ export function createOutlineTokenStore(): OutlineTokenStore {
  * order — env → v2 record → legacy plaintext — so the answer can never
  * contradict the token the runtime is actually using.
  *
+ * Pass `ref` to report the source of a specific `--user` account (used by
+ * `auth status --user <ref>`): a ref selects the matching record and skips the
+ * env short-circuit, so the source reflects the account being shown rather
+ * than an ambient env token. Without a ref the default/env cascade applies.
+ *
  * The precedence cascade is intentionally duplicated with `active()`:
  * the only true dedupe options either (a) add an extra config read on
  * every `apiRequest` call (regressing the request hot path) or (b)
@@ -333,11 +337,13 @@ export function createOutlineTokenStore(): OutlineTokenStore {
  * invites is guarded by the `getActiveTokenSource` regression test that
  * asserts v2-record presence wins over a lingering v1 `api_token`.
  */
-export async function getActiveTokenSource(): Promise<'env' | 'secure-store' | 'config-file'> {
-    if (process.env[TOKEN_ENV_VAR]?.trim()) return 'env'
+export async function getActiveTokenSource(
+    ref?: AccountRef,
+): Promise<'env' | 'secure-store' | 'config-file'> {
+    if (ref === undefined && process.env[TOKEN_ENV_VAR]?.trim()) return 'env'
     const config = await getConfig()
-    const record = getDefaultUserRecord(config)
+    const record = ref !== undefined ? recordForRef(config, ref) : getDefaultUserRecord(config)
     if (record) return record.fallbackToken ? 'config-file' : 'secure-store'
-    if (config.api_token?.trim()) return 'config-file'
+    if (ref === undefined && config.api_token?.trim()) return 'config-file'
     return 'secure-store'
 }

@@ -9,7 +9,7 @@ import { registerSearchCommand } from './commands/search.js'
 import { registerSkillCommand } from './commands/skill.js'
 import { registerUpdateCommand } from './commands/update/index.js'
 import { BaseCliError } from './lib/errors.js'
-import { isJsonMode } from './lib/global-args.js'
+import { applyUserSelector, isJsonMode } from './lib/global-args.js'
 import { formatError, formatErrorJson } from './lib/output.js'
 
 const program = new Command()
@@ -23,6 +23,10 @@ program
     .addHelpText(
         'after',
         `
+Global options:
+  --user <id|name>  Act as a specific stored account (place before the command,
+                    e.g. \`ol --user scott@example.com document list\`).
+
 Note for AI/LLM agents:
   Use --json or --ndjson flags for unambiguous, parseable output.
   Default JSON shows essential fields; use --full for all fields.`,
@@ -36,11 +40,21 @@ registerSkillCommand(program)
 registerChangelogCommand(program)
 registerUpdateCommand(program)
 
-program.parseAsync().catch((err: Error) => {
+function reportError(err: unknown): never {
     if (err instanceof BaseCliError) {
         console.error(isJsonMode() ? formatErrorJson(err) : formatError(err))
     } else {
-        console.error(err.message)
+        console.error(err instanceof Error ? err.message : String(err))
     }
     process.exit(1)
-})
+}
+
+// Commander has no root `--user` option, so validate it and strip it from argv
+// before parsing (see `applyUserSelector` for the warm-cache-then-strip order).
+try {
+    applyUserSelector(new Set(program.commands.map((c) => c.name())))
+} catch (err) {
+    reportError(err)
+}
+
+program.parseAsync().catch(reportError)

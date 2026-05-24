@@ -1,4 +1,4 @@
-import type { AuthAccount } from '@doist/cli-core/auth'
+import type { AccountRef, AuthAccount } from '@doist/cli-core/auth'
 
 /**
  * Narrow account shape persisted by the keyring-backed token store.
@@ -34,4 +34,14 @@ export function makeOutlineAccount(input: {
         oauthClientId: input.oauthClientId ?? '',
         teamName: input.teamName,
     }
+}
+
+/**
+ * Accepts the Outline user UUID or display name. Id matches are
+ * case-sensitive (UUIDs are canonical); label matches are case-insensitive
+ * so users can pass the name they see in `auth status`.
+ */
+export function matchOutlineAccount(account: OutlineAccount, ref: AccountRef): boolean {
+    if (account.id === ref) return true
+    return account.label.toLowerCase() === ref.toLowerCase()
 }

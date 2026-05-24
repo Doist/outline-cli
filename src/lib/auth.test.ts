@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SKIPPED_RESULT } from '../_fixtures/auth.js'
+import { SKIPPED_RESULT, TWO_USER_CONFIG } from '../_fixtures/auth.js'
 
 const TEST_XDG = join(tmpdir(), `outline-cli-test-${process.pid}-auth`)
 const TEST_CONFIG_DIR = join(TEST_XDG, 'outline-cli')
@@ -32,6 +32,7 @@ describe('auth', () => {
             rmSync(TEST_XDG, { recursive: true })
         }
         delete process.env.XDG_CONFIG_HOME
+        process.argv = ['node', 'ol']
     })
 
     it('getApiToken reads from env var first', async () => {
@@ -122,6 +123,61 @@ describe('auth', () => {
         )
         const { getOAuthClientId } = await import('./auth.js')
         await expect(getOAuthClientId()).resolves.toBe('cid-record')
+    })
+
+    describe('global --user selection', () => {
+        const TWO_USERS = JSON.stringify(TWO_USER_CONFIG)
+
+        function withUser(ref: string) {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            process.argv = ['node', 'ol', '--user', ref, 'document', 'list']
+        }
+
+        it('getRequestContext resolves the --user account instance + handshake', async () => {
+            withUser('Bob')
+            const { getRequestContext } = await import('./auth.js')
+            await expect(getRequestContext()).resolves.toEqual({
+                baseUrl: 'https://bob.example.com',
+                handshake: { baseUrl: 'https://bob.example.com', clientId: 'cid-bob' },
+            })
+        })
+
+        it('getRequestContext falls back to the default account without --user', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            const { getRequestContext } = await import('./auth.js')
+            await expect(getRequestContext()).resolves.toEqual({
+                baseUrl: 'https://ada.example.com',
+            })
+        })
+
+        it('getBaseUrl / getOAuthClientId stay account-agnostic under --user (login unaffected)', async () => {
+            withUser('Bob')
+            const { getBaseUrl, getOAuthClientId } = await import('./auth.js')
+            await expect(getBaseUrl()).resolves.toBe('https://ada.example.com')
+            await expect(getOAuthClientId()).resolves.toBe('cid-ada')
+        })
+
+        it('getApiToken returns the --user account token', async () => {
+            withUser('Bob')
+            const { getApiToken } = await import('./auth.js')
+            await expect(getApiToken()).resolves.toBe('tok-bob')
+        })
+
+        it('getApiToken rejects with ACCOUNT_NOT_FOUND for an unknown --user', async () => {
+            withUser('Nobody')
+            const { getApiToken } = await import('./auth.js')
+            await expect(getApiToken()).rejects.toMatchObject({ code: 'ACCOUNT_NOT_FOUND' })
+        })
+
+        it('env token wins: --user is ignored on the request path', async () => {
+            withUser('Bob')
+            process.env.OUTLINE_API_TOKEN = 'env-token'
+            const { getApiToken, getRequestContext } = await import('./auth.js')
+            await expect(getApiToken()).resolves.toBe('env-token')
+            await expect(getRequestContext()).resolves.toEqual({
+                baseUrl: 'https://ada.example.com',
+            })
+        })
     })
 
     it('reactiveRefresh maps an unrefreshable token to NoTokenError (prompts re-login)', async () => {

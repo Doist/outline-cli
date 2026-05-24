@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const authMocks = vi.hoisted(() => ({
     getApiToken: vi.fn(async () => 'test-token'),
-    getBaseUrl: vi.fn(async () => 'https://test.outline.com'),
+    getRequestContext: vi.fn(async () => ({ baseUrl: 'https://test.outline.com' })),
     proactiveRefresh: vi.fn(async () => undefined),
     reactiveRefresh: vi.fn(async () => false),
 }))
@@ -17,7 +17,9 @@ describe('apiRequest', () => {
     beforeEach(() => {
         delete process.env.OUTLINE_API_TOKEN
         authMocks.getApiToken.mockReset().mockResolvedValue('test-token')
-        authMocks.getBaseUrl.mockReset().mockResolvedValue('https://test.outline.com')
+        authMocks.getRequestContext
+            .mockReset()
+            .mockResolvedValue({ baseUrl: 'https://test.outline.com' })
         authMocks.proactiveRefresh.mockReset().mockResolvedValue(undefined)
         authMocks.reactiveRefresh.mockReset().mockResolvedValue(false)
     })

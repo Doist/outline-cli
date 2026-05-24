@@ -1,6 +1,6 @@
-import type { UserRecord, UserRecordStore } from '@doist/cli-core/auth'
+import type { AccountRef, UserRecord, UserRecordStore } from '@doist/cli-core/auth'
 import { type Config, getConfig, type StoredUser, updateConfig } from './config.js'
-import { makeOutlineAccount, type OutlineAccount } from './outline-account.js'
+import { makeOutlineAccount, matchOutlineAccount, type OutlineAccount } from './outline-account.js'
 
 /**
  * `UserRecordStore` adapter over `config.users[]`. `StoredUser.token` is
@@ -54,6 +54,24 @@ export function getDefaultUserRecord(config: Partial<Config>): UserRecord<Outlin
     const defaultId = config.default_user_id
     const user = (defaultId && users.find((u) => u.id === defaultId)) || users[0]
     return toRecord(user)
+}
+
+/**
+ * Resolve a `UserRecord` by `--user` ref (UUID or display name). Falls back to
+ * the default-or-first record when `ref` is absent, so callers can pass the
+ * global selector straight through. Returns `null` when no users are stored or
+ * an explicit ref matches nothing.
+ */
+export function recordForRef(
+    config: Partial<Config>,
+    ref?: AccountRef,
+): UserRecord<OutlineAccount> | null {
+    if (ref === undefined) return getDefaultUserRecord(config)
+    for (const user of config.users ?? []) {
+        const record = toRecord(user)
+        if (matchOutlineAccount(record.account, ref)) return record
+    }
+    return null
 }
 
 function toRecord(user: StoredUser): UserRecord<OutlineAccount> {

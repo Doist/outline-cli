@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AUTH_INFO } from '../_fixtures/auth.js'
+import { AUTH_INFO, TWO_USER_CONFIG } from '../_fixtures/auth.js'
 
 vi.mock('../lib/auth.js', () => ({
     getApiToken: async () => 'test-token',
@@ -71,6 +71,9 @@ afterEach(() => {
     delete process.env.OUTLINE_OAUTH_CALLBACK_PORT
     delete process.env.OUTLINE_API_TOKEN
     delete process.env.OUTLINE_URL
+    // Reset argv so a `--user` set by one test can't leak into the next via
+    // the (real) global-args parser.
+    process.argv = ['node', 'ol']
 })
 
 describe('registerAuthCommand', () => {
@@ -174,6 +177,36 @@ describe('auth status subcommand', () => {
             baseUrl: 'https://test.outline.com',
             source: 'env',
         })
+    })
+
+    it('honors a global --user via the wrapped store (routes to that account instance)', async () => {
+        // Exercises the real ref-aware store wiring (not a fake): a global
+        // `--user` before the command must reach `attachStatusCommand`'s store
+        // and resolve the named account, not the default. Guards against a
+        // regression where `registerAuthCommand` passes the raw store.
+        const { getConfig } = await import('../lib/config.js')
+        vi.mocked(getConfig).mockResolvedValue(TWO_USER_CONFIG)
+        const { resetGlobalArgs } = await import('../lib/global-args.js')
+        process.argv = ['node', 'ol', '--user', 'Bob', 'auth', 'status']
+        resetGlobalArgs()
+
+        const apiRequest = await importApiMock()
+        apiRequest.mockResolvedValue({ data: AUTH_INFO })
+
+        const program = await buildProgram()
+        await program.parseAsync(['node', 'ol', 'auth', 'status'])
+
+        // The probe used Bob's token + instance — proof the global --user flowed
+        // through the wrapped store rather than defaulting to Ada.
+        expect(apiRequest).toHaveBeenCalledWith(
+            'auth.info',
+            {},
+            { token: 'tok-bob', baseUrl: 'https://bob.example.com' },
+        )
+
+        // `vi.clearAllMocks()` only clears calls, not implementations, so restore
+        // the config default to keep this override from leaking into later tests.
+        vi.mocked(getConfig).mockResolvedValue({})
     })
 
     it('translates a 401 from auth.info into a NO_TOKEN CliError', async () => {

@@ -18,6 +18,7 @@ import {
 } from '../lib/auth-provider.js'
 import { refreshedTokenForStatus } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
+import { withUserRefAware } from '../lib/user-ref-store.js'
 
 const DEFAULT_OAUTH_CALLBACK_PORT = 54969
 
@@ -64,6 +65,10 @@ export function registerAuthCommand(program: Command): void {
 
     const provider = createOutlineAuthProvider()
     const store: OutlineTokenStore = createOutlineTokenStore()
+    // Honours a global `ol --user <ref>` placed before `auth status` / `auth
+    // logout`; login always targets the freshly authenticated account, so it
+    // keeps the raw store.
+    const refAware = withUserRefAware(store)
 
     attachLoginCommand(auth, {
         provider,
@@ -103,7 +108,7 @@ export function registerAuthCommand(program: Command): void {
     let statusData: StatusData | null = null
 
     attachStatusCommand<OutlineAccount>(auth, {
-        store,
+        store: refAware,
         description: 'Show current authentication state',
         async fetchLive({ account, token }) {
             try {
@@ -120,7 +125,11 @@ export function registerAuthCommand(program: Command): void {
                         {},
                         { token: liveToken, baseUrl: account.baseUrl },
                     ),
-                    getActiveTokenSource(),
+                    // Scope the source to the selected account so `auth status
+                    // --user <ref>` reports where *that* account's token lives,
+                    // not the default/env source. Empty id (env/legacy snapshot)
+                    // falls back to the default cascade.
+                    getActiveTokenSource(account.id || undefined),
                 ])
                 statusData = { email: info.user.email, source }
                 return {
@@ -164,7 +173,7 @@ export function registerAuthCommand(program: Command): void {
     })
 
     attachLogoutCommand<OutlineAccount>(auth, {
-        store,
+        store: refAware,
         description: 'Clear saved authentication',
         onCleared({ view }) {
             const result = store.getLastClearResult()
