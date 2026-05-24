@@ -32,6 +32,7 @@ describe('auth', () => {
             rmSync(TEST_XDG, { recursive: true })
         }
         delete process.env.XDG_CONFIG_HOME
+        process.argv = ['node', 'ol']
     })
 
     it('getApiToken reads from env var first', async () => {
@@ -122,6 +123,82 @@ describe('auth', () => {
         )
         const { getOAuthClientId } = await import('./auth.js')
         await expect(getOAuthClientId()).resolves.toBe('cid-record')
+    })
+
+    describe('global --user selection', () => {
+        const TWO_USERS = JSON.stringify({
+            config_version: 2,
+            users: [
+                {
+                    id: 'id-ada',
+                    name: 'Ada',
+                    base_url: 'https://ada.example.com',
+                    oauth_client_id: 'cid-ada',
+                    token: 'tok-ada',
+                },
+                {
+                    id: 'id-bob',
+                    name: 'Bob',
+                    base_url: 'https://bob.example.com',
+                    oauth_client_id: 'cid-bob',
+                    token: 'tok-bob',
+                },
+            ],
+            default_user_id: 'id-ada',
+        })
+
+        function withUser(ref: string) {
+            process.argv = ['node', 'ol', '--user', ref, 'document', 'list']
+        }
+
+        it('getBaseUrl resolves the --user account instance', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            withUser('Bob')
+            const { getBaseUrl } = await import('./auth.js')
+            await expect(getBaseUrl()).resolves.toBe('https://bob.example.com')
+        })
+
+        it('getBaseUrl falls back to the default account without --user', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            const { getBaseUrl } = await import('./auth.js')
+            await expect(getBaseUrl()).resolves.toBe('https://ada.example.com')
+        })
+
+        it('getOAuthClientId resolves the --user account', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            withUser('Bob')
+            const { getOAuthClientId } = await import('./auth.js')
+            await expect(getOAuthClientId()).resolves.toBe('cid-bob')
+        })
+
+        it('getApiToken returns the --user account token', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            withUser('Bob')
+            const { getApiToken } = await import('./auth.js')
+            await expect(getApiToken()).resolves.toBe('tok-bob')
+        })
+
+        it('getApiToken throws ACCOUNT_NOT_FOUND for an unknown --user', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            withUser('Nobody')
+            const { getApiToken } = await import('./auth.js')
+            let caught: unknown
+            try {
+                await getApiToken()
+            } catch (e) {
+                caught = e
+            }
+            expect((caught as { code?: string }).code).toBe('ACCOUNT_NOT_FOUND')
+        })
+
+        it('env token wins: --user is ignored for token and base URL', async () => {
+            writeFileSync(TEST_CONFIG_PATH, TWO_USERS)
+            process.env.OUTLINE_API_TOKEN = 'env-token'
+            withUser('Bob')
+            const { getApiToken, getBaseUrl } = await import('./auth.js')
+            await expect(getApiToken()).resolves.toBe('env-token')
+            await expect(getBaseUrl()).resolves.toBe('https://ada.example.com')
+        })
     })
 
     it('reactiveRefresh maps an unrefreshable token to NoTokenError (prompts re-login)', async () => {

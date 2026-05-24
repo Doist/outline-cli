@@ -8,8 +8,10 @@ import {
 } from './auth-provider.js'
 import { getConfig, getConfigPath } from './config.js'
 import { CliError } from './errors.js'
+import { getRequestedUserRef } from './global-args.js'
 import { DEFAULT_BASE_URL, type OutlineAccount } from './outline-account.js'
-import { getDefaultUserRecord } from './user-records.js'
+import { recordForRef } from './user-records.js'
+import { withUserRefAware } from './user-ref-store.js'
 
 export { SecureStoreUnavailableError, getActiveTokenSource, TOKEN_ENV_VAR }
 
@@ -32,8 +34,22 @@ export class NoTokenError extends CliError {
  */
 let storeSingleton: OutlineTokenStore | undefined
 function tokenStore(): OutlineTokenStore {
-    if (!storeSingleton) storeSingleton = createOutlineTokenStore()
+    // Wrapped so a global `--user <ref>` flows into every no-ref store read on
+    // the request hot path (token lookup + refresh). Without `--user`,
+    // `getRequestedUserRef()` is undefined and the wrap is a pass-through.
+    if (!storeSingleton) storeSingleton = withUserRefAware(createOutlineTokenStore())
     return storeSingleton
+}
+
+/**
+ * The `--user` ref to apply on the request path, or `undefined` when an
+ * `OUTLINE_API_TOKEN` is set — an env token wins outright, so base URL and
+ * client id resolve from the default account rather than the named one,
+ * keeping token / base URL / client id pinned to the same source.
+ */
+function requestPathUserRef(): string | undefined {
+    if (process.env[TOKEN_ENV_VAR]?.trim()) return undefined
+    return getRequestedUserRef()
 }
 
 let providerSingleton: ReturnType<typeof createOutlineAuthProvider> | undefined
@@ -147,7 +163,7 @@ export async function getBaseUrl(): Promise<string> {
     if (envUrl) return envUrl.replace(/\/$/, '')
 
     const config = await getConfig()
-    const record = getDefaultUserRecord(config)
+    const record = recordForRef(config, requestPathUserRef())
     if (record?.account.baseUrl) return record.account.baseUrl.replace(/\/$/, '')
     if (config.base_url) return config.base_url.replace(/\/$/, '')
     return DEFAULT_BASE_URL
@@ -162,7 +178,7 @@ export async function getOAuthClientId(): Promise<string | undefined> {
     if (envClientId) return envClientId
 
     const config = await getConfig()
-    const record = getDefaultUserRecord(config)
+    const record = recordForRef(config, requestPathUserRef())
     if (record?.account.oauthClientId) return record.account.oauthClientId
     return config.oauth_client_id
 }

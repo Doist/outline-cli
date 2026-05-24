@@ -14,10 +14,11 @@ import { LEGACY_CLEAR_PAYLOAD, SECURE_STORE_SERVICE, TOKEN_ENV_VAR } from './aut
 import { getBaseUrl, getOAuthClientId } from './auth.js'
 import { getConfig, getConfigPath, updateConfig } from './config.js'
 import { runMigrateLegacyAuth } from './migrate-auth.js'
-import { makeOutlineAccount, type OutlineAccount } from './outline-account.js'
+import { makeOutlineAccount, matchOutlineAccount, type OutlineAccount } from './outline-account.js'
 import { createOutlineUserRecordStore, getDefaultUserRecord } from './user-records.js'
 
 export type { OutlineAccount } from './outline-account.js'
+export { matchOutlineAccount } from './outline-account.js'
 
 export type AuthInfoResponse = {
     user: { id: string; name: string; email: string }
@@ -120,16 +121,6 @@ export function createOutlineAuthProvider(): AuthProvider<OutlineAccount> {
         },
         fetchImpl: outlineFetch,
     })
-}
-
-/**
- * Accepts the Outline user UUID or display name. Id matches are
- * case-sensitive (UUIDs are canonical); label matches are
- * case-insensitive so users can pass the name they see in `auth status`.
- */
-export function matchOutlineAccount(account: OutlineAccount, ref: AccountRef): boolean {
-    if (account.id === ref) return true
-    return account.label.toLowerCase() === ref.toLowerCase()
 }
 
 /** True when the v2 store is the authoritative source. */
