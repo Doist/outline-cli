@@ -14,6 +14,7 @@ Use this skill when the user wants to interact with their Outline wiki/knowledge
 - \`ol doc open <id>\` - Open document in browser
 - \`ol doc create --title "Title" --collection <id>\` - Create document
 - \`ol col list\` - List collections
+- \`ol account\` - List stored accounts; \`ol account use <id|name>\` sets the default
 
 ## Output Formats
 
@@ -86,6 +87,19 @@ ol auth status                         # Show current auth state
 ol auth status --json | --ndjson       # Machine-readable status envelope ({id, team, baseUrl, source})
 ol auth logout                         # Clear saved credentials
 ol auth logout --json | --ndjson       # Machine-readable logout envelope ({ok: true}; --ndjson is silent)
+\`\`\`
+
+### Accounts
+\`\`\`bash
+ol account                             # List stored accounts (default subcommand)
+ol account list                        # List stored accounts, default marked
+ol account list --json | --ndjson      # Machine-readable list ({accounts, default}; --ndjson streams one per line)
+ol account current                     # Show the active account (honours --user and OUTLINE_API_TOKEN)
+ol account current --json | --ndjson   # Machine-readable active account ({id, label, teamName, baseUrl, isDefault})
+ol account use <id|name>               # Set the default account used when --user is omitted
+ol account use <id|name> --json        # Machine-readable envelope ({ok: true, default: <id>}; --ndjson is silent)
+ol account remove <id|name>            # Remove a stored account (clears keyring + config entry)
+ol account remove <id|name> --json     # Machine-readable envelope ({ok: true, removed: <id>}; --ndjson is silent)
 \`\`\`
 
 ### Update & Changelog
