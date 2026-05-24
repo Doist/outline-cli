@@ -31,6 +31,11 @@ async function buildProgram(): Promise<Command> {
     return createTestProgram(registerAccountCommand)
 }
 
+const STORED_LIST = [
+    { account: STORED_ACCOUNT, isDefault: true },
+    { account: STORED_ACCOUNT_BOB, isDefault: false },
+]
+
 let logSpy: MockInstance
 let errSpy: MockInstance
 
@@ -52,10 +57,7 @@ afterEach(() => {
 describe('account command', () => {
     describe('list', () => {
         it('renders all stored accounts with the default marker', async () => {
-            storeMocks.list.mockResolvedValue([
-                { account: STORED_ACCOUNT, isDefault: true },
-                { account: STORED_ACCOUNT_BOB, isDefault: false },
-            ])
+            storeMocks.list.mockResolvedValue(STORED_LIST)
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'list'])
             const out = linesText(logSpy)
@@ -80,10 +82,7 @@ describe('account command', () => {
         })
 
         it('emits a {accounts, default} envelope under --json', async () => {
-            storeMocks.list.mockResolvedValue([
-                { account: STORED_ACCOUNT, isDefault: true },
-                { account: STORED_ACCOUNT_BOB, isDefault: false },
-            ])
+            storeMocks.list.mockResolvedValue(STORED_LIST)
             const program = await buildProgram()
             await program.parseAsync(['node', 'ol', 'account', 'list', '--json'])
             const payload = JSON.parse(linesText(logSpy))

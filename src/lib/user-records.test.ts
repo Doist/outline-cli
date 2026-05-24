@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { STORED_ACCOUNT } from '../_fixtures/auth.js'
+import { STORED_ACCOUNT, STORED_USER_ADA as ADA } from '../_fixtures/auth.js'
 
 const configMock = vi.hoisted(() => ({
     getConfig: vi.fn(),
@@ -10,14 +10,6 @@ vi.mock('./config.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('./config.js')>()
     return { ...actual, getConfig: configMock.getConfig, updateConfig: configMock.updateConfig }
 })
-
-const ADA = {
-    id: 'user-uuid',
-    name: 'Ada',
-    base_url: 'https://wiki.example.com',
-    oauth_client_id: 'cid-xyz',
-    team_name: 'Analytics',
-} as const
 
 const GRACE = {
     id: 'grace-uuid',
