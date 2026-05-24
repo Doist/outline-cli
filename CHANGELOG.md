@@ -1,3 +1,9 @@
+## [1.9.0](https://github.com/Doist/outline-cli/compare/v1.8.0...v1.9.0) (2026-05-24)
+
+### Features
+
+* **account:** account command group (cli-core attachers) ([#79](https://github.com/Doist/outline-cli/issues/79)) ([01bd6a6](https://github.com/Doist/outline-cli/commit/01bd6a60af135bbfda894b56d5a6d2b2229b70a8)), closes [#77](https://github.com/Doist/outline-cli/issues/77)
+
 ## [1.8.0](https://github.com/Doist/outline-cli/compare/v1.7.0...v1.8.0) (2026-05-21)
 
 ### Features
