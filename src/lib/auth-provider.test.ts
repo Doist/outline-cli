@@ -22,6 +22,7 @@ const keyringMocks = vi.hoisted(() => ({
     createKeyringTokenStore: vi.fn(),
     inner: {
         active: vi.fn(),
+        activeAccount: vi.fn(),
         activeBundle: vi.fn(),
         set: vi.fn(),
         setBundle: vi.fn(),
@@ -492,6 +493,93 @@ describe('createOutlineTokenStore', () => {
             promoteDefault: true,
         })
         expect(configMocks.updateConfig).toHaveBeenCalledWith(LEGACY_CLEAR_PAYLOAD)
+    })
+})
+
+describe('resolveActiveAccountSource', () => {
+    async function loadResolve(): Promise<
+        typeof import('./auth-provider.js').resolveActiveAccountSource
+    > {
+        vi.resetModules()
+        return (await import('./auth-provider.js')).resolveActiveAccountSource
+    }
+
+    beforeEach(() => {
+        delete process.env[TOKEN_ENV_VAR]
+        keyringMocks.inner.activeAccount.mockReset().mockResolvedValue(null)
+        migrateMocks.runMigrateLegacyAuth
+            .mockReset()
+            .mockResolvedValue({ status: 'no-legacy-state' })
+        configMocks.getConfig.mockReset().mockResolvedValue({})
+    })
+
+    afterEach(() => {
+        vi.unstubAllEnvs()
+    })
+
+    it('reports env (and bypasses migration + the v2 store) when OUTLINE_API_TOKEN is set and no ref', async () => {
+        vi.stubEnv(TOKEN_ENV_VAR, 'env_token_value')
+        const resolveActiveAccountSource = await loadResolve()
+
+        await expect(resolveActiveAccountSource()).resolves.toEqual({ source: 'env' })
+        expect(keyringMocks.inner.activeAccount).not.toHaveBeenCalled()
+        expect(migrateMocks.runMigrateLegacyAuth).not.toHaveBeenCalled()
+    })
+
+    it('reports the stored v2 account with its default marker', async () => {
+        keyringMocks.inner.activeAccount.mockResolvedValue({
+            account: STORED_ACCOUNT,
+            isDefault: true,
+        })
+        const resolveActiveAccountSource = await loadResolve()
+
+        await expect(resolveActiveAccountSource()).resolves.toEqual({
+            source: 'stored',
+            account: STORED_ACCOUNT,
+            isDefault: true,
+        })
+    })
+
+    it('prefers a stored v2 account over a lingering legacy token (inconclusive migration)', async () => {
+        // A legacy api_token is still on disk and migration is inconclusive, but
+        // the v2 store resolves a default — the stored account must win.
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG)
+        keyringMocks.inner.activeAccount.mockResolvedValue({
+            account: STORED_ACCOUNT,
+            isDefault: true,
+        })
+        const resolveActiveAccountSource = await loadResolve()
+
+        await expect(resolveActiveAccountSource()).resolves.toMatchObject({ source: 'stored' })
+    })
+
+    it('reports legacy only when the v2 store has no matching record', async () => {
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG)
+        keyringMocks.inner.activeAccount.mockResolvedValue(null)
+        const resolveActiveAccountSource = await loadResolve()
+
+        await expect(resolveActiveAccountSource()).resolves.toEqual({ source: 'legacy' })
+    })
+
+    it('does not misreport a renamed legacy snapshot as stored when --user matches the old name only', async () => {
+        // Regression for UUID-equality misclassification: the v2 record was
+        // renamed (so it no longer matches the old display name), while the
+        // legacy snapshot still carries it. `--user <old-name>` must resolve to
+        // legacy, not stored.
+        migrateMocks.runMigrateLegacyAuth.mockResolvedValue(SKIPPED_RESULT)
+        configMocks.getConfig.mockResolvedValue(LEGACY_CONFIG) // legacy label "Ada"
+        keyringMocks.inner.activeAccount.mockResolvedValue(null) // v2 record no longer matches "Ada"
+        const resolveActiveAccountSource = await loadResolve()
+
+        await expect(resolveActiveAccountSource('Ada')).resolves.toEqual({ source: 'legacy' })
+        expect(keyringMocks.inner.activeAccount).toHaveBeenCalledWith('Ada')
+    })
+
+    it('returns null when nothing is active', async () => {
+        const resolveActiveAccountSource = await loadResolve()
+        await expect(resolveActiveAccountSource()).resolves.toBeNull()
     })
 })
 

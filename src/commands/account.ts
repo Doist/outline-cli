@@ -9,15 +9,15 @@ import {
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { TOKEN_ENV_VAR } from '../lib/auth-constants.js'
+import { logClearResult } from '../lib/auth-output.js'
 import {
     createOutlineTokenStore,
     type OutlineAccount,
     type OutlineTokenStore,
+    resolveActiveAccountSource,
 } from '../lib/auth-provider.js'
 import { CliError } from '../lib/errors.js'
 import { getRequestedUserRef, isAccessible } from '../lib/global-args.js'
-import { withUserRefAware } from '../lib/user-ref-store.js'
-import { logClearResult } from './auth.js'
 
 /** `<label> (id:<id>)` with an accessibility-aware default marker. */
 function accountLine(account: OutlineAccount, isDefault: boolean): string {
@@ -37,47 +37,49 @@ function projectAccount(account: OutlineAccount, isDefault: boolean) {
 }
 
 /**
- * cli-core's `current` attacher calls `store.activeAccount()` once and renders
- * any non-null result as a stored account. But outline's store also synthesises
- * env-token and legacy single-user snapshots, which aren't real stored accounts.
- *
- * Resolve the ambient source once here and stash it so the render path reports a
- * single discriminated shape (`stored` / `env` / `legacy`) without re-probing
- * config. Precedence mirrors `active()`: an env token wins over stored accounts
- * (but only when no explicit account was requested), while a stored v2 account
- * is preferred over a lingering legacy token — so legacy is only surfaced when
- * the store has no v2 record backing the resolved account.
+ * Adapt the authoritative `resolveActiveAccountSource` to the `activeAccount`
+ * contract cli-core's `current` attacher consumes: a stored account resolves
+ * normally; the out-of-store env/legacy sources resolve to `null` (their source
+ * stashed for `onNotAuthenticated` to render) so they aren't shown as accounts.
+ * A `--user`/positional ref that matches nothing surfaces as `ACCOUNT_NOT_FOUND`,
+ * matching the global `--user` selector elsewhere.
  */
-function makeCurrentResolver(store: OutlineTokenStore, refAware: OutlineTokenStore) {
+function currentResolverStore(store: OutlineTokenStore): {
+    store: OutlineTokenStore
+    getSource: () => 'env' | 'legacy' | undefined
+} {
     let source: 'env' | 'legacy' | undefined
-    const currentStore: OutlineTokenStore = {
-        ...refAware,
+    const wrapped: OutlineTokenStore = {
+        ...store,
         activeAccount: async (ref?: AccountRef) => {
             source = undefined
             const requested = ref ?? getRequestedUserRef()
-            if (requested === undefined && process.env[TOKEN_ENV_VAR]?.trim()) {
-                source = 'env'
+            const resolution = await resolveActiveAccountSource(requested)
+            if (resolution?.source === 'stored') {
+                return { account: resolution.account, isDefault: resolution.isDefault }
+            }
+            if (resolution) {
+                source = resolution.source
                 return null
             }
-            const resolved = await refAware.activeAccount(ref)
-            if (!resolved) return null
-            const isStored = (await store.list()).some(
-                (entry) => entry.account.id === resolved.account.id,
-            )
-            if (isStored) return resolved
-            source = 'legacy'
+            if (requested !== undefined) {
+                throw new CliError(
+                    'ACCOUNT_NOT_FOUND',
+                    `No stored account matches "${requested}".`,
+                    ['Check the account id or display name, or run `ol auth login` to add it.'],
+                )
+            }
             return null
         },
     }
-    return { currentStore, getSource: () => source }
+    return { store: wrapped, getSource: () => source }
 }
 
 export function registerAccountCommand(program: Command): void {
     const account = program.command('account').description('Manage stored CLI accounts')
     const store = createOutlineTokenStore()
-    const refAware = withUserRefAware(store)
 
-    attachAccountListCommand<OutlineAccount>(account, {
+    const list = attachAccountListCommand<OutlineAccount>(account, {
         store,
         description: 'List stored Outline accounts',
         renderText: ({ accounts }) => {
@@ -94,7 +96,7 @@ export function registerAccountCommand(program: Command): void {
         description: 'Set the default account (matched by Outline user id or display name)',
     })
 
-    const { currentStore, getSource } = makeCurrentResolver(store, refAware)
+    const { store: currentStore, getSource } = currentResolverStore(store)
     attachAccountCurrentCommand<OutlineAccount>(account, {
         store: currentStore,
         description: 'Show the active account (honours --user and OUTLINE_API_TOKEN)',
@@ -142,14 +144,13 @@ export function registerAccountCommand(program: Command): void {
         onRemoved: ({ view }) => logClearResult(store, view.json || view.ndjson),
     })
 
-    // `attachAccountListCommand` registers `list` without commander's default
-    // flag, so wire the parent default explicitly to keep bare `ol account`
-    // listing stored accounts. Commander exposes no public setter for this in
-    // the pinned version (`typeof account.defaultCommand === 'undefined'`), and
-    // the attacher owns the `command('list')` call so `{ isDefault: true }` can't
-    // be passed at creation — hence the internal-field assignment (mirrors
-    // twist-cli).
-    ;(account as unknown as { _defaultCommandName: string })._defaultCommandName = 'list'
+    // Make bare `ol account` list. A parent action runs only when no subcommand
+    // matches, so `ol account list` still routes to the subcommand directly —
+    // this just delegates the no-subcommand case via the public API (no reliance
+    // on commander internals).
+    account.action(async () => {
+        await list.parseAsync([], { from: 'user' })
+    })
 
     account.addHelpText(
         'after',

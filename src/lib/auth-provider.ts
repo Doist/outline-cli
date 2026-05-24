@@ -216,13 +216,48 @@ export async function isLegacyAuthActive(): Promise<boolean> {
  * propagates it so a failed logout fails loudly instead of leaving the
  * user authenticated via the legacy fallback.
  */
-export function createOutlineTokenStore(): OutlineTokenStore {
-    const inner = createKeyringTokenStore<OutlineAccount>({
+/** The bare cli-core keyring store (v2 records only — no env/legacy fallback). */
+function createInnerStore(): KeyringTokenStore<OutlineAccount> {
+    return createKeyringTokenStore<OutlineAccount>({
         serviceName: SECURE_STORE_SERVICE,
         userRecords: createOutlineUserRecordStore(),
         recordsLocation: getConfigPath(),
         matchAccount: matchOutlineAccount,
     })
+}
+
+/** Where `ol account current` resolves the active credential from. */
+export type ActiveAccountSource =
+    | { source: 'stored'; account: OutlineAccount; isDefault: boolean }
+    | { source: 'env' }
+    | { source: 'legacy' }
+    | null
+
+/**
+ * Authoritatively classify the active credential without re-deriving the
+ * cascade from membership heuristics. Mirrors `active()`'s precedence — env
+ * (only when no explicit ref) → stored v2 → legacy snapshot — but reports
+ * *which* branch matched, so `ol account current` can render the right shape.
+ *
+ * The v2 lookup uses the bare keyring store (no legacy fallback) and matches by
+ * `ref`, so a renamed legacy snapshot sharing a UUID with a v2 record can't be
+ * misreported as `stored`: a `--user <old-name>` that the v2 record no longer
+ * matches falls through to the legacy branch.
+ */
+export async function resolveActiveAccountSource(ref?: AccountRef): Promise<ActiveAccountSource> {
+    if (ref === undefined && process.env[TOKEN_ENV_VAR]?.trim()) return { source: 'env' }
+    await ensureMigrated()
+    const stored = await createInnerStore().activeAccount(ref)
+    if (stored) return { source: 'stored', account: stored.account, isDefault: stored.isDefault }
+    const legacy = await readLegacyTokenSnapshot()
+    if (legacy && (ref === undefined || matchOutlineAccount(legacy.account, ref))) {
+        return { source: 'legacy' }
+    }
+    return null
+}
+
+export function createOutlineTokenStore(): OutlineTokenStore {
+    const inner = createInnerStore()
     async function migrationIsInconclusive(): Promise<boolean> {
         const result = await ensureMigrated() // memoised
         return result === null || !migrationIsConclusive(result)
