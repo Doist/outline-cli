@@ -66,7 +66,7 @@ describe('auth token (save)', () => {
     it('validates via auth.info, stores the resolved account, and confirms', async () => {
         const log = captureConsole()
         const apiRequest = await importApiMock()
-        apiRequest.mockResolvedValue({ data: AUTH_INFO })
+        apiRequest.mockResolvedValueOnce({ data: AUTH_INFO })
 
         const program = await buildProgram()
         await program.parseAsync([
@@ -101,7 +101,7 @@ describe('auth token (save)', () => {
         const apiRequest = await importApiMock()
         // Outline's real invalid-token error carries no status code (api.ts drops
         // it when the body has a message); the wrapper must hide it entirely.
-        apiRequest.mockRejectedValue(new Error('API error: Unable to decode token'))
+        apiRequest.mockRejectedValueOnce(new Error('API error: Unable to decode token'))
 
         const program = await buildProgram()
         const err = (await program
@@ -114,10 +114,7 @@ describe('auth token (save)', () => {
                 '--base-url',
                 'https://wiki.test',
             ])
-            .then(
-                () => null,
-                (e: unknown) => e,
-            )) as CliError
+            .catch((e: unknown) => e)) as CliError
 
         expect(err.code).toBe('AUTH_VERIFICATION_FAILED')
         expect(err.message).toBe('Could not verify the token with Outline')
@@ -138,9 +135,9 @@ describe('auth token (save)', () => {
 
     it('reads the token from a masked prompt when no argument is given in a TTY', async () => {
         setStdinIsTTY(true)
-        promptMock.mockResolvedValue('tok-prompt')
+        promptMock.mockResolvedValueOnce('tok-prompt')
         const apiRequest = await importApiMock()
-        apiRequest.mockResolvedValue({ data: AUTH_INFO })
+        apiRequest.mockResolvedValueOnce({ data: AUTH_INFO })
 
         const program = await buildProgram()
         await program.parseAsync(['node', 'ol', 'auth', 'token', '--base-url', 'https://wiki.test'])
@@ -155,7 +152,7 @@ describe('auth token (save)', () => {
     it('suppresses the human confirmation in machine-output mode', async () => {
         const log = captureConsole()
         const apiRequest = await importApiMock()
-        apiRequest.mockResolvedValue({ data: AUTH_INFO })
+        apiRequest.mockResolvedValueOnce({ data: AUTH_INFO })
 
         // `--json` is a root selector read off argv by global-args, not a
         // commander option on `auth token`, so warm the cache rather than
@@ -182,7 +179,7 @@ describe('auth token (save)', () => {
 
 describe('auth token view', () => {
     it('writes the bare stored token to stdout with no envelope or newline', async () => {
-        storeMocks.active.mockResolvedValue({ token: 'stored-tok', account: STORED_ACCOUNT })
+        storeMocks.active.mockResolvedValueOnce({ token: 'stored-tok', account: STORED_ACCOUNT })
         const out = captureStream('stdout')
 
         const program = await buildProgram()
@@ -200,12 +197,12 @@ describe('auth token view', () => {
     })
 
     it('routes a global --user through the ref-aware store', async () => {
-        storeMocks.active.mockImplementation(async (ref?: string) =>
+        storeMocks.active.mockImplementationOnce(async (ref?: string) =>
             ref === 'Bob'
                 ? { token: 'tok-bob', account: STORED_ACCOUNT_BOB }
                 : { token: 'tok-ada', account: STORED_ACCOUNT },
         )
-        storeMocks.activeAccount.mockResolvedValue({
+        storeMocks.activeAccount.mockResolvedValueOnce({
             account: STORED_ACCOUNT_BOB,
             isDefault: false,
         })

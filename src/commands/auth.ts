@@ -8,7 +8,7 @@ import chalk from 'chalk'
 import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'
 import { TOKEN_ENV_VAR } from '../lib/auth-constants.js'
-import { logClearResult, logTokenStorageResult } from '../lib/auth-output.js'
+import { logClearResult, logSaveResult } from '../lib/auth-output.js'
 import { renderError, renderSuccess } from '../lib/auth-pages.js'
 import {
     type AuthInfoResponse,
@@ -52,7 +52,8 @@ async function saveToken(
         if (!process.stdin.isTTY) {
             throw new CliError('NO_TOKEN', 'No token provided', [
                 'Pass it as an argument: ol auth token <token>',
-                'Or set the OUTLINE_API_TOKEN environment variable',
+                'Run in an interactive terminal to be prompted for it',
+                'Set OUTLINE_API_TOKEN to authenticate without storing a token',
                 'Or use OAuth: ol auth login',
             ])
         }
@@ -81,14 +82,7 @@ async function saveToken(
     if (!machine) {
         console.log(chalk.green('✓'), `Saved token for ${account.label} (${account.teamName})`)
     }
-    const result = store.getLastStorageResult()
-    if (result) {
-        logTokenStorageResult(
-            result,
-            'Token stored securely in the system credential manager',
-            machine,
-        )
-    }
+    logSaveResult(store, machine)
 }
 
 export function registerAuthCommand(program: Command): void {
@@ -113,14 +107,7 @@ export function registerAuthCommand(program: Command): void {
             if (!isMachineOutput) {
                 console.log(chalk.green(`Authenticated to ${account.teamName} as ${account.label}`))
             }
-            const result = store.getLastStorageResult()
-            if (result) {
-                logTokenStorageResult(
-                    result,
-                    'Token stored securely in the system credential manager',
-                    isMachineOutput,
-                )
-            }
+            logSaveResult(store, isMachineOutput)
         },
     })
         .description('Authenticate with an Outline instance via OAuth')

@@ -1,4 +1,5 @@
 import { createInterface } from 'node:readline/promises'
+import { Writable } from 'node:stream'
 import {
     type AccountRef,
     type AuthProvider,
@@ -27,32 +28,39 @@ export type AuthInfoResponse = {
 
 export type OutlineTokenStore = KeyringTokenStore<OutlineAccount>
 
-function stringFlag(flags: Record<string, unknown>, key: string): string | undefined {
-    const value = flags[key]
+function stringFlag(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 /**
  * Read a line from stdin, prompting on stderr so `--json` / `--ndjson`
  * envelopes on stdout stay clean. With `hidden: true` the typed characters are
- * masked (for secrets): the prompt label is shown once, then readline's echo is
- * muted so keystrokes don't leak to the terminal.
+ * masked (for secrets): the prompt label is shown, then readline's echo is
+ * routed through a muted `Writable` so keystrokes don't leak to the terminal.
  */
 export async function prompt(
     question: string,
     options: { hidden?: boolean } = {},
 ): Promise<string> {
-    const rl = createInterface({ input: process.stdin, output: process.stderr })
-    try {
-        if (!options.hidden) return (await rl.question(question)).trim()
-        const internal = rl as unknown as { _writeToOutput?: (str: string) => void }
-        const original = internal._writeToOutput?.bind(rl)
-        let muted = false
-        internal._writeToOutput = (str: string) => {
-            if (original && !muted) original(str)
+    if (!options.hidden) {
+        const rl = createInterface({ input: process.stdin, output: process.stderr })
+        try {
+            return (await rl.question(question)).trim()
+        } finally {
+            rl.close()
         }
-        // `question()` writes the prompt synchronously; mute everything after so
-        // only the typed characters are suppressed, not the label.
+    }
+    // Echo the prompt label, then mute so typed characters aren't shown. A muted
+    // `Writable` (public API) avoids poking readline's private `_writeToOutput`.
+    let muted = false
+    const output = new Writable({
+        write(chunk, _encoding, callback) {
+            if (!muted) process.stderr.write(chunk)
+            callback()
+        },
+    })
+    const rl = createInterface({ input: process.stdin, output, terminal: true })
+    try {
         const pending = rl.question(question)
         muted = true
         const answer = (await pending).trim()
@@ -64,10 +72,7 @@ export async function prompt(
 }
 
 export async function resolveBaseUrl(options: { baseUrl?: unknown } = {}): Promise<string> {
-    const fromFlag =
-        typeof options.baseUrl === 'string' && options.baseUrl.trim()
-            ? options.baseUrl.trim()
-            : undefined
+    const fromFlag = stringFlag(options.baseUrl)
     if (fromFlag) return fromFlag.replace(/\/$/, '')
     const fromEnv = process.env.OUTLINE_URL?.trim()
     if (fromEnv) return fromEnv.replace(/\/$/, '')
@@ -100,7 +105,7 @@ export async function identifyAccount(
 }
 
 async function resolveClientId(flags: Record<string, unknown>): Promise<string> {
-    const fromFlag = stringFlag(flags, 'clientId')
+    const fromFlag = stringFlag(flags.clientId)
     if (fromFlag) return fromFlag
     const existing = await getOAuthClientId()
     if (existing) return existing
