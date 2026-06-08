@@ -1,3 +1,9 @@
+## [1.10.1](https://github.com/Doist/outline-cli/compare/v1.10.0...v1.10.1) (2026-06-08)
+
+### Bug Fixes
+
+* pin undici to 7.24.8 and block renovate updates ([#82](https://github.com/Doist/outline-cli/issues/82)) ([1f7cdc9](https://github.com/Doist/outline-cli/commit/1f7cdc9d575d1f99968b088abbeafd9182e52c84))
+
 ## [1.10.0](https://github.com/Doist/outline-cli/compare/v1.9.0...v1.10.0) (2026-05-24)
 
 ### Features
