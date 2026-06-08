@@ -1,4 +1,11 @@
 {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["github>doist/renovate-config:frontend-base"]
+    "extends": ["github>doist/renovate-config:frontend-base"],
+    "packageRules": [
+        {
+            "matchPackageNames": ["undici"],
+            "enabled": false,
+            "description": "Pin undici to 7.24.8 - block renovate updates to avoid the Node 26 regression in newer 7.x releases"
+        }
+    ]
 }
