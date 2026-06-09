@@ -24,6 +24,15 @@ function createDefaultDispatcher(): Dispatcher {
         ? new EnvHttpProxyAgent(KEEP_ALIVE_OPTIONS)
         : new Agent(KEEP_ALIVE_OPTIONS)
 
+    // Some runtimes report `process.versions.node` but ship only a partial
+    // undici: `interceptors.decompress` is absent and dispatchers have no
+    // `.compose`. Bun is the common case. There the base agent alone is
+    // enough — Bun's `fetch` decompresses gzip/deflate/br/zstd natively — so
+    // skip the interceptor instead of crashing on the missing API.
+    if (typeof interceptors.decompress !== 'function') {
+        return base
+    }
+
     // Compose the response-decompression interceptor so gzip/deflate/br/zstd
     // bodies are decoded before consumers parse them. Required on Node 24+:
     // attaching any custom dispatcher to the global `fetch` strips the

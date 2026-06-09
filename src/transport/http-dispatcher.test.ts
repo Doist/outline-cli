@@ -54,6 +54,34 @@ describe('http-dispatcher', () => {
         expect(proxiedDispatcher).not.toBe(directDispatcher)
     })
 
+    it('skips the decompress interceptor when the runtime undici lacks it (e.g. Bun)', async () => {
+        // Bun reports `process.versions.node` but ships a partial undici whose
+        // `interceptors.decompress` is absent. Building the dispatcher must not
+        // throw there — the base agent alone is correct because Bun's `fetch`
+        // decompresses natively.
+        vi.doMock('undici', async () => {
+            const actual = await vi.importActual<typeof import('undici')>('undici')
+            return {
+                ...actual,
+                interceptors: {
+                    ...actual.interceptors,
+                    decompress: undefined,
+                },
+            }
+        })
+
+        try {
+            const { getDefaultDispatcher } = await import('./http-dispatcher.js')
+            const dispatcher = getDefaultDispatcher()
+
+            expect(dispatcher).toBeDefined()
+            expect(typeof dispatcher.dispatch).toBe('function')
+        } finally {
+            vi.doUnmock('undici')
+            vi.resetModules()
+        }
+    })
+
     it('decompresses gzip-encoded response bodies', async () => {
         const payload = { hello: 'world', nested: { value: 42 } }
         const compressed = gzipSync(Buffer.from(JSON.stringify(payload)))
