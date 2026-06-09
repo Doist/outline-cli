@@ -1,3 +1,9 @@
+## [1.10.2](https://github.com/Doist/outline-cli/compare/v1.10.1...v1.10.2) (2026-06-09)
+
+### Bug Fixes
+
+* build a working dispatcher on runtimes without undici's decompress interceptor (e.g. Bun) ([#84](https://github.com/Doist/outline-cli/issues/84)) ([c2c69d2](https://github.com/Doist/outline-cli/commit/c2c69d2f1c9eddb08f3f2b0d8236d93770219203))
+
 ## [1.10.1](https://github.com/Doist/outline-cli/compare/v1.10.0...v1.10.1) (2026-06-08)
 
 ### Bug Fixes
