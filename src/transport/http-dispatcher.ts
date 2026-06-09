@@ -28,8 +28,9 @@ function createDefaultDispatcher(): Dispatcher {
     // undici: `interceptors.decompress` is absent and dispatchers have no
     // `.compose`. Bun is the common case. There the base agent alone is
     // enough — Bun's `fetch` decompresses gzip/deflate/br/zstd natively — so
-    // skip the interceptor instead of crashing on the missing API.
-    if (typeof interceptors.decompress !== 'function') {
+    // skip the interceptor instead of crashing on the missing API. Optional
+    // chaining also guards a runtime that omits the `interceptors` export.
+    if (typeof interceptors?.decompress !== 'function') {
         return base
     }
 

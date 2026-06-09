@@ -59,6 +59,10 @@ describe('http-dispatcher', () => {
         // `interceptors.decompress` is absent. Building the dispatcher must not
         // throw there — the base agent alone is correct because Bun's `fetch`
         // decompresses natively.
+        // Clear the module cache first so the fresh `http-dispatcher.js` import
+        // below re-evaluates against the mocked `undici` instead of a copy that
+        // earlier tests already bound to the real one.
+        vi.resetModules()
         vi.doMock('undici', async () => {
             const actual = await vi.importActual<typeof import('undici')>('undici')
             return {
@@ -77,8 +81,10 @@ describe('http-dispatcher', () => {
             expect(dispatcher).toBeDefined()
             expect(typeof dispatcher.dispatch).toBe('function')
         } finally {
+            // Leave `resetModules` to `afterEach`: it must reach this same
+            // module instance to close the dispatcher created above before the
+            // cache is cleared, otherwise the dispatcher leaks.
             vi.doUnmock('undici')
-            vi.resetModules()
         }
     })
 
