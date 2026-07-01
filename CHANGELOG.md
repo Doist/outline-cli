@@ -1,3 +1,9 @@
+## [1.10.3](https://github.com/Doist/outline-cli/compare/v1.10.2...v1.10.3) (2026-07-01)
+
+### Bug Fixes
+
+* **docs:** Update readme with correct token command ([#88](https://github.com/Doist/outline-cli/issues/88)) ([8bfe8a0](https://github.com/Doist/outline-cli/commit/8bfe8a0d4f5a7b8e1be8a5bef1de3c6661cfd205))
+
 ## [1.10.2](https://github.com/Doist/outline-cli/compare/v1.10.1...v1.10.2) (2026-06-09)
 
 ### Bug Fixes
