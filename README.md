@@ -86,10 +86,16 @@ for your local environment.
 If you prefer using an API token directly:
 
 ```bash
-ol auth login --token <your-api-token>
+ol auth token <your-api-token>   # save a token (verifies it against your instance)
+ol auth token                    # prompt for the token interactively
+ol auth token view               # print the stored token to stdout
 ```
 
-Generate a token in Outline under Settings → API Tokens.
+Generate a token in Outline under Settings → API Tokens. Pass
+`--base-url <your-outline-url>` if the token belongs to a self-hosted instance.
+
+You can also skip storing a token entirely by setting `OUTLINE_API_TOKEN` in
+your environment.
 
 ### Configuration
 
