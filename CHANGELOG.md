@@ -1,3 +1,9 @@
+## [1.10.4](https://github.com/Doist/outline-cli/compare/v1.10.3...v1.10.4) (2026-07-29)
+
+### Bug Fixes
+
+* set Comms audience to thread ([#90](https://github.com/Doist/outline-cli/issues/90)) ([c54be07](https://github.com/Doist/outline-cli/commit/c54be07e95c7c63f29a84d0e51b16673a0e5f519))
+
 ## [1.10.3](https://github.com/Doist/outline-cli/compare/v1.10.2...v1.10.3) (2026-07-01)
 
 ### Bug Fixes
