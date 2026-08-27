@@ -1,4 +1,4 @@
-import { getDefaultDispatcher } from './http-dispatcher.js'
+import { getDefaultTransport } from './http-dispatcher.js'
 
 interface RetryConfig {
     retries: number
@@ -99,10 +99,20 @@ export async function fetchWithRetry(args: FetchWithRetryArgs): Promise<Response
                 ...requestOptions,
                 signal: requestSignal,
             }
+            // Take the dispatcher and its `fetch` as one value: the dispatcher
+            // decompresses the body itself, so a `fetch` from a different
+            // undici build decodes it a second time and the request fails with
+            // `terminated`. A `fetch` of `undefined` means the global one is
+            // the right partner (see `DefaultTransport`).
+            const transport = getDefaultTransport()
             // @ts-expect-error dispatcher is supported by Node.js fetch via Undici
-            fetchOptions.dispatcher = getDefaultDispatcher()
+            fetchOptions.dispatcher = transport.dispatcher
 
-            const response = await fetch(url, fetchOptions)
+            // undici's `fetch` and the global `fetch` have the same call shape;
+            // the cast only reconciles undici's own Request/Response types with
+            // the global lib types.
+            const fetchImpl = (transport.fetch ?? fetch) as typeof fetch
+            const response = await fetchImpl(url, fetchOptions)
             if (clearTimeoutFn) {
                 clearTimeoutFn()
             }

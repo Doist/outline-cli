@@ -1,4 +1,10 @@
-import { Agent, type Dispatcher, EnvHttpProxyAgent, interceptors } from 'undici'
+import {
+    Agent,
+    type Dispatcher,
+    EnvHttpProxyAgent,
+    fetch as undiciFetch,
+    interceptors,
+} from 'undici'
 
 const KEEP_ALIVE_OPTIONS = {
     keepAliveTimeout: 1,
@@ -7,7 +13,28 @@ const KEEP_ALIVE_OPTIONS = {
 
 const PROXY_ENV_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'] as const
 
-let defaultDispatcher: Dispatcher | undefined
+// undici's own `fetch`, typed from the same package the dispatcher comes from.
+type UndiciFetch = typeof undiciFetch
+
+/**
+ * A dispatcher and the `fetch` it must be used with. `fetch` is undici's own
+ * `fetch` when the decompress interceptor is composed, or `undefined` (meaning:
+ * use the runtime's global `fetch`) on runtimes that ship a partial undici.
+ *
+ * The two halves are cached together so a caller can never hold a dispatcher
+ * paired with a mismatched `fetch`. The dispatcher decompresses the response
+ * body itself and strips `content-encoding` from the parsed headers only; a
+ * `fetch` from a different undici build reads the *raw* headers, still sees
+ * `content-encoding: gzip`, and decodes an already-decoded body — the request
+ * then dies mid-stream with `TypeError: terminated`. Node's global `fetch` is
+ * backed by whatever undici ships inside that Node release (6.x on Node 22 …
+ * 8.x on Node 26), which is never the npm `undici` this dispatcher comes from,
+ * so sourcing `fetch` from the same package keeps the whole request path on
+ * one version.
+ */
+export type DefaultTransport = { dispatcher: Dispatcher; fetch: UndiciFetch | undefined }
+
+let defaultTransport: DefaultTransport | undefined
 
 function hasProxyEnv(): boolean {
     for (const key of PROXY_ENV_KEYS) {
@@ -19,7 +46,7 @@ function hasProxyEnv(): boolean {
     return false
 }
 
-function createDefaultDispatcher(): Dispatcher {
+function createDefaultTransport(): DefaultTransport {
     const base = hasProxyEnv()
         ? new EnvHttpProxyAgent(KEEP_ALIVE_OPTIONS)
         : new Agent(KEEP_ALIVE_OPTIONS)
@@ -31,7 +58,9 @@ function createDefaultDispatcher(): Dispatcher {
     // skip the interceptor instead of crashing on the missing API. Optional
     // chaining also guards a runtime that omits the `interceptors` export.
     if (typeof interceptors?.decompress !== 'function') {
-        return base
+        // Nothing decompresses on our side, so the global `fetch` — which
+        // decompresses natively here — is the correct partner.
+        return { dispatcher: base, fetch: undefined }
     }
 
     // Compose the response-decompression interceptor so gzip/deflate/br/zstd
@@ -42,21 +71,31 @@ function createDefaultDispatcher(): Dispatcher {
     // See https://github.com/Doist/todoist-cli/issues/318.
     const decompress = suppressExperimentalWarningsSync(() => interceptors.decompress())
 
-    return base.compose(decompress)
+    return { dispatcher: base.compose(decompress), fetch: undiciFetch }
 }
 
-export function getDefaultDispatcher(): Dispatcher {
-    defaultDispatcher ??= createDefaultDispatcher()
-    return defaultDispatcher
+/**
+ * The default dispatcher and the `fetch` it must be used with, as a single
+ * value so the two are always read together. Use both halves:
+ *
+ * ```ts
+ * const transport = getDefaultTransport()
+ * const fetchImpl = transport.fetch ?? fetch
+ * await fetchImpl(url, { ...options, dispatcher: transport.dispatcher })
+ * ```
+ */
+export function getDefaultTransport(): DefaultTransport {
+    defaultTransport ??= createDefaultTransport()
+    return defaultTransport
 }
 
 export async function resetDefaultDispatcherForTests(): Promise<void> {
-    if (!defaultDispatcher) {
+    if (!defaultTransport) {
         return
     }
 
-    const dispatcher = defaultDispatcher
-    defaultDispatcher = undefined
+    const { dispatcher } = defaultTransport
+    defaultTransport = undefined
     await dispatcher.close()
 }
 
@@ -79,7 +118,7 @@ export async function resetDefaultDispatcherForTests(): Promise<void> {
 // that slips past the type check.
 //
 // Exported for direct unit testing — the integration path through
-// `getDefaultDispatcher()` cannot reliably exercise the helper a second time
+// `getDefaultTransport()` cannot reliably exercise the helper a second time
 // because both the dispatcher singleton and undici's internal `warningEmitted`
 // flag are once-per-process.
 type SyncOnly<T> = T extends PromiseLike<unknown> ? never : T

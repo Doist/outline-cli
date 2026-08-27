@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { gzipSync } from 'node:zlib'
-import { Agent, EnvHttpProxyAgent } from 'undici'
+import { Agent, EnvHttpProxyAgent, fetch as undiciFetch } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureProxyEnv, clearProxyEnv, restoreProxyEnv } from '../_fixtures/proxy-env.js'
 
@@ -22,32 +22,43 @@ describe('http-dispatcher', () => {
     })
 
     it('returns a direct Agent when no proxy env vars are set', async () => {
-        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
+        const { getDefaultTransport } = await import('./http-dispatcher.js')
 
-        expect(getDefaultDispatcher()).toBeInstanceOf(Agent)
+        expect(getDefaultTransport().dispatcher).toBeInstanceOf(Agent)
     })
 
     it('returns an EnvHttpProxyAgent when proxy env vars are set', async () => {
         process.env.HTTPS_PROXY = 'http://proxy.local:8080'
-        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
+        const { getDefaultTransport } = await import('./http-dispatcher.js')
 
-        expect(getDefaultDispatcher()).toBeInstanceOf(EnvHttpProxyAgent)
+        expect(getDefaultTransport().dispatcher).toBeInstanceOf(EnvHttpProxyAgent)
     })
 
-    it('caches the dispatcher instance', async () => {
-        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
+    it("pairs the dispatcher with undici's own fetch, not the global one", async () => {
+        const { getDefaultTransport } = await import('./http-dispatcher.js')
 
-        expect(getDefaultDispatcher()).toBe(getDefaultDispatcher())
+        // The dispatcher decompresses the body and strips `content-encoding`
+        // from the parsed headers only. Node's global `fetch` comes from a
+        // different undici build that reads the raw headers, so it decodes the
+        // body a second time and the request dies with `terminated`.
+        expect(getDefaultTransport().fetch).toBe(undiciFetch)
+        expect(getDefaultTransport().fetch).not.toBe(globalThis.fetch)
+    })
+
+    it('caches the transport instance', async () => {
+        const { getDefaultTransport } = await import('./http-dispatcher.js')
+
+        expect(getDefaultTransport()).toBe(getDefaultTransport())
     })
 
     it('reset lets tests re-evaluate env-dependent transport selection', async () => {
-        const { getDefaultDispatcher, resetDefaultDispatcherForTests } =
+        const { getDefaultTransport, resetDefaultDispatcherForTests } =
             await import('./http-dispatcher.js')
-        const directDispatcher = getDefaultDispatcher()
+        const directDispatcher = getDefaultTransport().dispatcher
 
         process.env.HTTPS_PROXY = 'http://proxy.local:8080'
         await resetDefaultDispatcherForTests()
-        const proxiedDispatcher = getDefaultDispatcher()
+        const proxiedDispatcher = getDefaultTransport().dispatcher
 
         expect(directDispatcher).toBeInstanceOf(Agent)
         expect(proxiedDispatcher).toBeInstanceOf(EnvHttpProxyAgent)
@@ -75,11 +86,15 @@ describe('http-dispatcher', () => {
         })
 
         try {
-            const { getDefaultDispatcher } = await import('./http-dispatcher.js')
-            const dispatcher = getDefaultDispatcher()
+            const { getDefaultTransport } = await import('./http-dispatcher.js')
+            const { dispatcher, fetch: pairedFetch } = getDefaultTransport()
 
             expect(dispatcher).toBeDefined()
             expect(typeof dispatcher.dispatch).toBe('function')
+            // Nothing decompresses on our side here, so the global `fetch` —
+            // which decompresses natively on such runtimes — is the correct
+            // partner, signalled by `fetch: undefined`.
+            expect(pairedFetch).toBeUndefined()
         } finally {
             // Leave `resetModules` to `afterEach`: it must reach this same
             // module instance to close the dispatcher created above before the
@@ -106,9 +121,13 @@ describe('http-dispatcher', () => {
 
         try {
             const { port } = httpServer.address() as AddressInfo
-            const { getDefaultDispatcher } = await import('./http-dispatcher.js')
-            const dispatcher = getDefaultDispatcher()
-            const response = await fetch(`http://127.0.0.1:${port}/`, {
+            const { getDefaultTransport } = await import('./http-dispatcher.js')
+            const { dispatcher, fetch: pairedFetch } = getDefaultTransport()
+            // Request through the paired `fetch`, which is what
+            // `fetchWithRetry` does — the global `fetch` with this dispatcher
+            // is the mismatched pairing production never uses.
+            const fetchImpl = (pairedFetch ?? fetch) as typeof fetch
+            const response = await fetchImpl(`http://127.0.0.1:${port}/`, {
                 // @ts-expect-error - dispatcher is a valid Node fetch option not in TS lib types
                 dispatcher,
             })
@@ -206,7 +225,7 @@ describe('http-dispatcher integration with decompress interceptor', () => {
                     decompress: () => {
                         // Simulate undici's experimental warning being emitted
                         // synchronously at compose time — this is the exact
-                        // shape `getDefaultDispatcher()` must suppress.
+                        // shape `getDefaultTransport()` must suppress.
                         process.emitWarning(
                             'mock decompress experimental warning',
                             'ExperimentalWarning',
@@ -217,8 +236,8 @@ describe('http-dispatcher integration with decompress interceptor', () => {
             }
         })
 
-        const { getDefaultDispatcher } = await import('./http-dispatcher.js')
-        const dispatcher = getDefaultDispatcher()
+        const { getDefaultTransport } = await import('./http-dispatcher.js')
+        const { dispatcher } = getDefaultTransport()
         expect(dispatcher).toBeDefined()
 
         const experimentalCalls = emitSpy.mock.calls.filter(
