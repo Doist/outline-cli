@@ -62,7 +62,7 @@
 		"@semantic-release/changelog": "6.0.3",
 		"@semantic-release/git": "10.0.1",
 		"@types/node": "25.0.10",
-		"conventional-changelog-conventionalcommits": "9.3.0",
+		"conventional-changelog-conventionalcommits": "9.3.1",
 		"lefthook": "2.0.15",
 		"oxfmt": "0.42.0",
 		"oxlint": "1.57.0",
