@@ -54,7 +54,7 @@
 		"commander": "14.0.2",
 		"marked": "18.0.3",
 		"marked-terminal-renderer": "2.2.0",
-		"oauth4webapi": "3.8.6",
+		"oauth4webapi": "3.8.7",
 		"open": "10.2.0",
 		"undici": "^7.29.0"
 	},
