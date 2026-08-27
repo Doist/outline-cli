@@ -1,3 +1,9 @@
+## [1.10.5](https://github.com/Doist/outline-cli/compare/v1.10.4...v1.10.5) (2026-08-27)
+
+### Bug Fixes
+
+* pair the undici dispatcher with its own fetch and bump to 7.29.0 ([#92](https://github.com/Doist/outline-cli/issues/92)) ([173d857](https://github.com/Doist/outline-cli/commit/173d857df858615b81e7d903630fdd379eb93db6))
+
 ## [1.10.4](https://github.com/Doist/outline-cli/compare/v1.10.3...v1.10.4) (2026-07-29)
 
 ### Bug Fixes
