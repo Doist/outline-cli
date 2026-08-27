@@ -1,4 +1,6 @@
-import type { Dispatcher } from 'undici'
+import { createServer, type IncomingMessage, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { Agent, type Dispatcher, fetch as undiciFetch } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { okResponse } from '../_fixtures/auth.js'
 import { captureProxyEnv, clearProxyEnv, restoreProxyEnv } from '../_fixtures/proxy-env.js'
@@ -13,10 +15,10 @@ const transport = vi.hoisted(() => ({
     dispatcher: { id: 'test-dispatcher' } as unknown as Dispatcher,
     fetch: undefined as typeof fetch | undefined,
 }))
+const defaultTestDispatcher = transport.dispatcher
 
 vi.mock('./http-dispatcher.js', () => ({
     getDefaultTransport: () => ({ dispatcher: transport.dispatcher, fetch: transport.fetch }),
-    resetDefaultDispatcherForTests: vi.fn(() => Promise.resolve()),
 }))
 
 /** A `fetch` impl that never resolves and rejects with the abort reason on signal. */
@@ -45,6 +47,7 @@ describe('fetchWithRetry', () => {
 
     afterEach(() => {
         transport.fetch = undefined
+        transport.dispatcher = defaultTestDispatcher
         restoreProxyEnv(originalProxyEnv)
         vi.useRealTimers()
         vi.unstubAllGlobals()
@@ -177,5 +180,82 @@ describe('fetchWithRetry', () => {
                 signal: expect.any(AbortSignal),
             }),
         )
+    })
+    it('flattens a global Request into a URL and init', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(okResponse({ ok: true }))
+        vi.stubGlobal('fetch', fetchMock)
+
+        const { fetchWithRetry } = await import('./fetch-with-retry.js')
+        await fetchWithRetry({
+            url: new Request('https://test.outline.com/api/documents.info', {
+                method: 'POST',
+                headers: { 'x-custom': 'kept' },
+                body: 'payload',
+            }),
+        })
+
+        const [requestUrl, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit]
+        expect(requestUrl).toBe('https://test.outline.com/api/documents.info')
+        expect(requestInit.method).toBe('POST')
+        expect(Object.fromEntries(requestInit.headers as string[][])).toMatchObject({
+            'x-custom': 'kept',
+        })
+        expect(new TextDecoder().decode(requestInit.body as ArrayBuffer)).toBe('payload')
+    })
+
+    it('lets explicit options win over the fields carried on a Request', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(okResponse({ ok: true }))
+        vi.stubGlobal('fetch', fetchMock)
+
+        const { fetchWithRetry } = await import('./fetch-with-retry.js')
+        await fetchWithRetry({
+            url: new Request('https://test.outline.com/api/documents.info', { method: 'POST' }),
+            options: { method: 'PUT' },
+        })
+
+        expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'PUT' })
+    })
+
+    it('sends a global Request through the real paired undici fetch', async () => {
+        // The regression this guards: undici's `fetch` only recognises its own
+        // `Request` class and stringifies a global one, so the request fails
+        // with `Failed to parse URL from [object Request]`. Runs against a real
+        // server through the real undici fetch — a mock cannot see this.
+        const received: { method?: string; header?: string; body: string } = { body: '' }
+        const httpServer: Server = await new Promise((resolve) => {
+            const s = createServer((req: IncomingMessage, res) => {
+                received.method = req.method
+                received.header = req.headers['x-custom'] as string
+                req.on('data', (chunk) => {
+                    received.body += String(chunk)
+                })
+                req.on('end', () => {
+                    res.writeHead(200, { 'content-type': 'application/json' })
+                    res.end(JSON.stringify({ ok: true }))
+                })
+            })
+            s.listen(0, '127.0.0.1', () => resolve(s))
+        })
+        const agent = new Agent()
+        transport.dispatcher = agent
+        transport.fetch = undiciFetch as unknown as typeof fetch
+
+        try {
+            const { port } = httpServer.address() as AddressInfo
+            const { fetchWithRetry } = await import('./fetch-with-retry.js')
+            const response = await fetchWithRetry({
+                url: new Request(`http://127.0.0.1:${port}/api/documents.info`, {
+                    method: 'POST',
+                    headers: { 'x-custom': 'kept' },
+                    body: 'payload',
+                }),
+            })
+
+            expect(response.status).toBe(200)
+            expect(received).toEqual({ method: 'POST', header: 'kept', body: 'payload' })
+        } finally {
+            await agent.close()
+            await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+        }
     })
 })
