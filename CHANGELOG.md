@@ -1,3 +1,13 @@
+## [2.0.0](https://github.com/Doist/outline-cli/compare/v1.10.5...v2.0.0) (2026-08-27)
+
+### ⚠ BREAKING CHANGES
+
+* update @doist/cli-core to 1.4.0 and require Node 24 (#93)
+
+### Features
+
+* update @doist/cli-core to 1.4.0 and require Node 24 ([#93](https://github.com/Doist/outline-cli/issues/93)) ([e695029](https://github.com/Doist/outline-cli/commit/e6950291d895133887505c67c984601825320407))
+
 ## [1.10.5](https://github.com/Doist/outline-cli/compare/v1.10.4...v1.10.5) (2026-08-27)
 
 ### Bug Fixes
