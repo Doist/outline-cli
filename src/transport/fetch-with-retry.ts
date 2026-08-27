@@ -1,4 +1,4 @@
-import { getDefaultDispatcher } from './http-dispatcher.js'
+import { getDefaultTransport } from './http-dispatcher.js'
 
 interface RetryConfig {
     retries: number
@@ -78,8 +78,59 @@ function createTimeoutSignal(
     return { signal: controller.signal, clear }
 }
 
+/**
+ * Both `Request` classes in play here — the global one and undici's — reject
+ * each other's instances: the check is a plain `instanceof`, and anything that
+ * fails it gets stringified, so the request dies with `Failed to parse URL
+ * from [object Request]`. Duck-typing catches either class.
+ */
+function isRequestLike(value: unknown): value is Request {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'url' in value &&
+        'method' in value &&
+        'headers' in value
+    )
+}
+
+/**
+ * Flatten a `Request` input into a plain URL and init, so neither `fetch`
+ * implementation is ever handed a `Request` the other one owns.
+ * `fetchWithRetry` is exposed as a `typeof fetch` (see `outlineFetch` in
+ * `auth-provider.ts`), so a `Request` is a shape callers may legitimately pass.
+ *
+ * Reading the body to a buffer up front also keeps it replayable: a request
+ * stream is consumed by the first attempt and would replay as an empty body.
+ *
+ * Explicit `options` win over the request's own fields, matching
+ * `fetch(request, init)`.
+ */
+async function flattenRequestInput(
+    url: RequestInfo | URL,
+    options: FetchOptions,
+): Promise<{ url: string | URL; options: FetchOptions }> {
+    if (typeof url === 'string' || url instanceof URL || !isRequestLike(url)) {
+        return { url: url as string | URL, options }
+    }
+
+    const body = url.body ? await url.arrayBuffer() : undefined
+
+    return {
+        url: url.url,
+        options: {
+            method: url.method,
+            headers: [...url.headers],
+            ...(body === undefined ? {} : { body }),
+            ...(url.signal ? { signal: url.signal } : {}),
+            ...options,
+        },
+    }
+}
+
 export async function fetchWithRetry(args: FetchWithRetryArgs): Promise<Response> {
-    const { url, options = {}, retryConfig = {} } = args
+    const { url, options: rawOptions = {}, retryConfig = {} } = args
+    const { url: requestUrl, options } = await flattenRequestInput(url, rawOptions)
     const config = { ...DEFAULT_RETRY_CONFIG, ...retryConfig }
     const { timeout, signal: userSignal, ...requestOptions } = options
     let lastError: Error | undefined
@@ -99,10 +150,20 @@ export async function fetchWithRetry(args: FetchWithRetryArgs): Promise<Response
                 ...requestOptions,
                 signal: requestSignal,
             }
+            // Take the dispatcher and its `fetch` as one value: the dispatcher
+            // decompresses the body itself, so a `fetch` from a different
+            // undici build decodes it a second time and the request fails with
+            // `terminated`. A `fetch` of `undefined` means the global one is
+            // the right partner (see `DefaultTransport`).
+            const transport = getDefaultTransport()
             // @ts-expect-error dispatcher is supported by Node.js fetch via Undici
-            fetchOptions.dispatcher = getDefaultDispatcher()
+            fetchOptions.dispatcher = transport.dispatcher
 
-            const response = await fetch(url, fetchOptions)
+            // undici's `fetch` and the global `fetch` have the same call shape;
+            // the cast only reconciles undici's own Request/Response types with
+            // the global lib types.
+            const fetchImpl = (transport.fetch ?? fetch) as typeof fetch
+            const response = await fetchImpl(requestUrl, fetchOptions)
             if (clearTimeoutFn) {
                 clearTimeoutFn()
             }

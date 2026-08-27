@@ -4,8 +4,8 @@
     "packageRules": [
         {
             "matchPackageNames": ["undici"],
-            "enabled": false,
-            "description": "Pin undici to 7.24.8 - block renovate updates to avoid the Node 26 regression in newer 7.x releases"
+            "allowedVersions": "<8",
+            "description": "An undici 8 dispatcher hangs indefinitely against Node 24's built-in fetch, so stay on the 7.x line"
         },
         {
             "matchPackageNames": ["oxlint", "oxfmt"],
