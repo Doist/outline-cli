@@ -1,3 +1,11 @@
+## [2.0.1](https://github.com/Doist/outline-cli/compare/v2.0.0...v2.0.1) (2026-08-28)
+
+### Bug Fixes
+
+* **deps:** pin dependency undici to 7.29.0 ([#94](https://github.com/Doist/outline-cli/issues/94)) ([1049dec](https://github.com/Doist/outline-cli/commit/1049dec715dd77ecb6621cebe068b3a06a5d2d89))
+* **deps:** update dependency marked to v18.0.10 ([#100](https://github.com/Doist/outline-cli/issues/100)) ([b57defd](https://github.com/Doist/outline-cli/commit/b57defd917f1e63a765baf13b04832cfe87899fd))
+* **deps:** update dependency oauth4webapi to v3.8.7 ([#101](https://github.com/Doist/outline-cli/issues/101)) ([5e456b7](https://github.com/Doist/outline-cli/commit/5e456b7cd2a0966c72b28e533b6ab564d38ca6b6))
+
 ## [2.0.0](https://github.com/Doist/outline-cli/compare/v1.10.5...v2.0.0) (2026-08-27)
 
 ### ⚠ BREAKING CHANGES
