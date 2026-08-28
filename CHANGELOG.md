@@ -1,3 +1,9 @@
+## [2.0.3](https://github.com/Doist/outline-cli/compare/v2.0.2...v2.0.3) (2026-08-28)
+
+### Bug Fixes
+
+* **deps:** update dependency chalk to v6 ([#107](https://github.com/Doist/outline-cli/issues/107)) ([0cff6e4](https://github.com/Doist/outline-cli/commit/0cff6e4b7e7718047fe7178172a6fd6218c67927))
+
 ## [2.0.2](https://github.com/Doist/outline-cli/compare/v2.0.1...v2.0.2) (2026-08-28)
 
 ### Bug Fixes
