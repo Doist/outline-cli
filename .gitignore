@@ -2,3 +2,10 @@ node_modules/
 dist/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# npm is the package manager for this repo; other lockfiles are accidental
+pnpm-lock.yaml
+pnpm-workspace.yaml
+yarn.lock
+bun.lockb
+bun.lock
