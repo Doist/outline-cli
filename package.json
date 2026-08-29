@@ -52,7 +52,7 @@
 		"@doist/cli-core": "1.4.0",
 		"chalk": "6.0.0",
 		"commander": "15.0.0",
-		"marked": "18.0.10",
+		"marked": "18.0.11",
 		"marked-terminal-renderer": "2.2.0",
 		"oauth4webapi": "3.8.7",
 		"open": "11.0.1",
