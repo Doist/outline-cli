@@ -1,3 +1,9 @@
+## [2.0.5](https://github.com/Doist/outline-cli/compare/v2.0.4...v2.0.5) (2026-09-04)
+
+### Bug Fixes
+
+* **deps:** update dependency open to v11.0.2 ([#114](https://github.com/Doist/outline-cli/issues/114)) ([7af2e84](https://github.com/Doist/outline-cli/commit/7af2e842aee6dc3f91b2d537737045687fbe912a))
+
 ## [2.0.4](https://github.com/Doist/outline-cli/compare/v2.0.3...v2.0.4) (2026-08-29)
 
 ### Bug Fixes
