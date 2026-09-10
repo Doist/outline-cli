@@ -1,6 +1,6 @@
 {
 	"name": "@doist/outline-cli",
-	"version": "2.0.5",
+	"version": "2.0.6",
 	"description": "CLI for the Outline wiki/knowledge base API",
 	"type": "module",
 	"bin": {
