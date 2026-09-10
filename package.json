@@ -56,7 +56,7 @@
 		"marked-terminal-renderer": "2.2.0",
 		"oauth4webapi": "3.8.7",
 		"open": "11.0.2",
-		"undici": "7.29.0"
+		"undici": "7.29.1"
 	},
 	"devDependencies": {
 		"@semantic-release/changelog": "7.0.0",
