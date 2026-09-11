@@ -1,3 +1,9 @@
+## [2.0.7](https://github.com/Doist/outline-cli/compare/v2.0.6...v2.0.7) (2026-09-11)
+
+### Bug Fixes
+
+* **deps:** update dependency oauth4webapi to v3.8.8 ([#118](https://github.com/Doist/outline-cli/issues/118)) ([bdbdb0b](https://github.com/Doist/outline-cli/commit/bdbdb0baf954b2ee2157a8e655c617a9d010f086))
+
 ## [2.0.6](https://github.com/Doist/outline-cli/compare/v2.0.5...v2.0.6) (2026-09-10)
 
 ### Bug Fixes
