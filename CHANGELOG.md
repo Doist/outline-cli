@@ -1,3 +1,9 @@
+## [2.1.0](https://github.com/Doist/outline-cli/compare/v2.0.9...v2.1.0) (2026-09-16)
+
+### Features
+
+* **auth:** refresh an expiring OAuth token before `token view` / `status` ([#123](https://github.com/Doist/outline-cli/issues/123)) ([2584eaf](https://github.com/Doist/outline-cli/commit/2584eaf33f0368285ee47e4d3d94adcd6696d66f))
+
 ## [2.0.9](https://github.com/Doist/outline-cli/compare/v2.0.8...v2.0.9) (2026-09-15)
 
 ### Bug Fixes
