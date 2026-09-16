@@ -55,7 +55,7 @@
 		"marked": "18.0.12",
 		"marked-terminal-renderer": "2.2.0",
 		"oauth4webapi": "3.8.8",
-		"open": "11.0.2",
+		"open": "11.0.3",
 		"undici": "7.29.1"
 	},
 	"devDependencies": {
