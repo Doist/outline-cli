@@ -180,6 +180,27 @@ describe('auth', () => {
         })
     })
 
+    it('getTokenRefreshOptions pins the handshake to the account cli-core selected', async () => {
+        const { getTokenRefreshOptions } = await import('./auth.js')
+
+        const options = getTokenRefreshOptions()
+
+        expect(options.lockPath).toBe(`${TEST_CONFIG_PATH}.refresh.lock`)
+        expect(typeof options.provider.refreshToken).toBe('function')
+        if (typeof options.handshake !== 'function')
+            throw new Error('expected a handshake resolver')
+        expect(
+            options.handshake({
+                account: {
+                    id: 'id-bob',
+                    label: 'Bob',
+                    baseUrl: 'https://bob.example.com',
+                    oauthClientId: 'cid-bob',
+                },
+            }),
+        ).toEqual({ baseUrl: 'https://bob.example.com', clientId: 'cid-bob' })
+    })
+
     it('reactiveRefresh maps an unrefreshable token to NoTokenError (prompts re-login)', async () => {
         // A stored access token with no refresh token can't be rotated, so the
         // real refreshAccessToken throws AUTH_REFRESH_UNAVAILABLE — which the

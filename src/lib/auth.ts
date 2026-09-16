@@ -1,4 +1,8 @@
-import { refreshAccessToken, SecureStoreUnavailableError } from '@doist/cli-core/auth'
+import {
+    refreshAccessToken,
+    SecureStoreUnavailableError,
+    type TokenRefreshOptions,
+} from '@doist/cli-core/auth'
 import { TOKEN_ENV_VAR } from './auth-constants.js'
 import {
     createOutlineAuthProvider,
@@ -97,28 +101,18 @@ export async function proactiveRefresh(
 }
 
 /**
- * Refresh the *selected* account (not the default) for `auth status`, returning
- * its current-or-rotated token. Scoped via the account's id + base URL/client
- * id through the refresh handshake, so `--user <other>` checks and rotates the
- * right account at the right instance. Env / legacy / record-less accounts
- * aren't refreshable — the snapshot `fallback` token is returned as-is.
+ * Refresh wiring for cli-core's `auth status` / `auth token view` attachers,
+ * so both hand back a token that is usable right now rather than whatever
+ * was last stored. The attachers pass their own (`--user`-aware) store, so
+ * the handshake is resolved from the account cli-core actually selected —
+ * pinning the refresh to that account's instance and client id. Env, legacy
+ * and record-less accounts carry no refresh token and are served as-is.
  */
-export async function refreshedTokenForStatus(
-    account: OutlineAccount,
-    fallback: string,
-): Promise<string> {
-    if (process.env[TOKEN_ENV_VAR]?.trim() || !account.id) return fallback
-    try {
-        const { bundle } = await refreshAccessToken({
-            store: tokenStore(),
-            provider: authProvider(),
-            lockPath: refreshLockPath(),
-            ref: account.id,
-            handshake: { baseUrl: account.baseUrl, clientId: account.oauthClientId },
-        })
-        return bundle.accessToken
-    } catch {
-        return fallback
+export function getTokenRefreshOptions(): TokenRefreshOptions<OutlineAccount> {
+    return {
+        provider: authProvider(),
+        lockPath: refreshLockPath(),
+        handshake: ({ account }) => ({ baseUrl: account.baseUrl, clientId: account.oauthClientId }),
     }
 }
 

@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { AuthProvider } from '@doist/cli-core/auth'
 import { captureConsole, captureStream, createTestProgram } from '@doist/cli-core/testing'
 import type { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,13 +11,23 @@ import type { CliError } from '../lib/errors.js'
 
 // `auth token` save drives the raw store's `set` + `getLastStorageResult`;
 // `auth token view` (real cli-core attacher) reads through the ref-aware store's
-// `active` / `activeAccount`. Stub the store so neither path touches a keyring.
+// `active` / `activeAccount`, or `activeBundle` + `setBundle` when a refresh
+// is wired. Stub the store so no path touches a keyring.
 const storeMocks = vi.hoisted(() => ({
     set: vi.fn(),
     getLastStorageResult: vi.fn(() => undefined),
     active: vi.fn(),
     activeAccount: vi.fn(async () => ({ account: STORED_ACCOUNT, isDefault: true })),
+    activeBundle: vi.fn(async () => null),
+    setBundle: vi.fn(async () => undefined),
 }))
+
+// No refresh path by default so `token view` reads the stored token as-is; the
+// refresh test below swaps in a fake provider and restores the default after.
+vi.mock('../lib/auth.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../lib/auth.js')>()
+    return { ...actual, getTokenRefreshOptions: vi.fn(() => undefined) }
+})
 
 // Stub the shared masked prompt so the interactive (no-argument) save path is
 // testable without a real TTY. `identifyAccount` / `resolveBaseUrl` stay real.
@@ -214,5 +228,50 @@ describe('auth token view', () => {
 
         expect(storeMocks.active).toHaveBeenCalledWith('Bob')
         expect(out.mock.calls).toEqual([['tok-bob']])
+    })
+
+    it('prints the rotated token when the stored OAuth token is expiring', async () => {
+        const lockDir = await mkdtemp(join(tmpdir(), 'ol-auth-'))
+        const refreshToken = vi.fn(async () => ({
+            accessToken: 'rotated-tok',
+            refreshToken: 'rotated-rt',
+            expiresAt: Date.now() + 3_600_000,
+        }))
+        const { getTokenRefreshOptions } = await import('../lib/auth.js')
+        vi.mocked(getTokenRefreshOptions).mockReturnValue({
+            provider: { refreshToken } as unknown as AuthProvider<typeof STORED_ACCOUNT>,
+            lockPath: join(lockDir, 'refresh.lock'),
+            handshake: { baseUrl: STORED_ACCOUNT.baseUrl, clientId: STORED_ACCOUNT.oauthClientId },
+        })
+        storeMocks.activeBundle.mockResolvedValue({
+            account: STORED_ACCOUNT,
+            bundle: {
+                accessToken: 'stored-tok',
+                refreshToken: 'stored-rt',
+                accessTokenExpiresAt: Date.now() - 1_000,
+            },
+        })
+        const out = captureStream('stdout')
+
+        try {
+            const program = await buildProgram()
+            await program.parseAsync(['node', 'ol', 'auth', 'token', 'view'])
+        } finally {
+            vi.mocked(getTokenRefreshOptions).mockReturnValue(undefined)
+            storeMocks.activeBundle.mockReset().mockResolvedValue(null)
+            await rm(lockDir, { recursive: true, force: true })
+        }
+
+        expect(refreshToken).toHaveBeenCalledWith({
+            refreshToken: 'stored-rt',
+            handshake: { baseUrl: STORED_ACCOUNT.baseUrl, clientId: STORED_ACCOUNT.oauthClientId },
+        })
+        expect(storeMocks.setBundle).toHaveBeenCalledWith(
+            STORED_ACCOUNT,
+            expect.objectContaining({ accessToken: 'rotated-tok', refreshToken: 'rotated-rt' }),
+        )
+        expect(out.mock.calls).toEqual([['rotated-tok']])
+        // The stored-token read is bypassed entirely once a refresh ran.
+        expect(storeMocks.active).not.toHaveBeenCalled()
     })
 })
