@@ -99,12 +99,18 @@ describe('registerAuthCommand', () => {
         // attachers do with `refresh`; this guards that ol actually passes it.
         const refresh = { provider: {}, lockPath: '/tmp/refresh.lock' }
         const { getTokenRefreshOptions } = await import('../lib/auth.js')
+        // Both attachers call the builder at registration, so restore the
+        // fixture default afterwards rather than relying on a one-shot value.
         vi.mocked(getTokenRefreshOptions).mockReturnValue(
             refresh as unknown as ReturnType<typeof getTokenRefreshOptions>,
         )
         const { attachStatusCommand, attachTokenViewCommand } = await import('@doist/cli-core/auth')
 
-        await captureAttachOptions()
+        try {
+            await captureAttachOptions()
+        } finally {
+            vi.mocked(getTokenRefreshOptions).mockReturnValue(undefined)
+        }
 
         expect(vi.mocked(attachStatusCommand).mock.calls[0][1].refresh).toBe(refresh)
         expect(vi.mocked(attachTokenViewCommand).mock.calls[0][1].refresh).toBe(refresh)
