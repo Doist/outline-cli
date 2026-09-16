@@ -88,7 +88,7 @@ If you prefer using an API token directly:
 ```bash
 ol auth token <your-api-token>   # save a token (verifies it against your instance)
 ol auth token                    # prompt for the token interactively
-ol auth token view               # print the stored token to stdout
+ol auth token view               # print the stored token to stdout (refreshes an expiring OAuth token first)
 ```
 
 Generate a token in Outline under Settings → API Tokens. Pass

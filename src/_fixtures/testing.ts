@@ -35,6 +35,9 @@ export function mockOutlineAuthModule(overrides: Record<string, unknown> = {}) {
         getBaseUrl: async () => 'https://test.outline.com',
         getOAuthClientId: async () => undefined,
         getActiveTokenSource: async () => 'config-file' as const,
+        // No refresh path by default so the attachers read the stored token
+        // as-is; a test that wants cli-core's refresh supplies a fake provider.
+        getTokenRefreshOptions: vi.fn(() => undefined),
         ...overrides,
     }
 }

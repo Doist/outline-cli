@@ -21,7 +21,7 @@ import {
     prompt,
     resolveBaseUrl,
 } from '../lib/auth-provider.js'
-import { refreshedTokenForStatus } from '../lib/auth.js'
+import { getTokenRefreshOptions } from '../lib/auth.js'
 import { CliError } from '../lib/errors.js'
 import { isJsonMode } from '../lib/global-args.js'
 import { withUserRefAware } from '../lib/user-ref-store.js'
@@ -128,20 +128,17 @@ export function registerAuthCommand(program: Command): void {
     attachStatusCommand<OutlineAccount>(auth, {
         store: refAware,
         description: 'Show current authentication state',
+        // Outline access tokens last ~an hour; without a refresh `auth status`
+        // can't self-heal even though normal commands do. cli-core rotates the
+        // selected account's token first and hands `fetchLive` the live one.
+        refresh: getTokenRefreshOptions(),
         async fetchLive({ account, token }) {
             try {
-                // Refresh the *selected* account before the check (scoped via
-                // its id + base URL/client id), then probe with the rotated
-                // token. Outline access tokens last ~an hour; without this
-                // `auth status` can't self-heal even though normal commands
-                // do. Passing the resolved token keeps the check tied to the
-                // requested account rather than the default.
-                const liveToken = await refreshedTokenForStatus(account, token)
                 const [{ data: info }, source] = await Promise.all([
                     apiRequest<AuthInfoResponse>(
                         'auth.info',
                         {},
-                        { token: liveToken, baseUrl: account.baseUrl },
+                        { token, baseUrl: account.baseUrl },
                     ),
                     // Scope the source to the selected account so `auth status
                     // --user <ref>` reports where *that* account's token lives,
@@ -210,6 +207,7 @@ export function registerAuthCommand(program: Command): void {
         name: 'view',
         store: refAware,
         envVarName: TOKEN_ENV_VAR,
+        refresh: getTokenRefreshOptions(),
         description:
             'Print the stored token for the active user (or --user <ref>) to stdout for scripts',
     })

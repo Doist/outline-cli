@@ -8,9 +8,6 @@ vi.mock('../lib/auth.js', () =>
     mockOutlineAuthModule({
         getActiveTokenSource: async () =>
             process.env.OUTLINE_API_TOKEN ? ('env' as const) : ('secure-store' as const),
-        // status resolves the live token for the selected account via this; echo
-        // the snapshot token back (no refresh in these command-surface tests).
-        refreshedTokenForStatus: async (_account: unknown, fallback: string) => fallback,
     }),
 )
 
@@ -27,10 +24,18 @@ vi.mock('../lib/config.js', () => ({
 // (chained flags, env-driven port, success hook) without running the flow.
 // `attachStatusCommand` and `attachLogoutCommand` fall through to the real
 // cli-core implementations so the integration is exercised end-to-end.
-vi.mock('@doist/cli-core/auth', async () => ({
-    ...(await vi.importActual<typeof import('@doist/cli-core/auth')>('@doist/cli-core/auth')),
-    attachLoginCommand: vi.fn(),
-}))
+vi.mock('@doist/cli-core/auth', async () => {
+    const actual =
+        await vi.importActual<typeof import('@doist/cli-core/auth')>('@doist/cli-core/auth')
+    return {
+        ...actual,
+        attachLoginCommand: vi.fn(),
+        // Pass-through spies so the wiring tests can inspect the options the
+        // real attachers received.
+        attachStatusCommand: vi.fn(actual.attachStatusCommand),
+        attachTokenViewCommand: vi.fn(actual.attachTokenViewCommand),
+    }
+})
 
 async function captureAttachOptions() {
     const { attachLoginCommand } = await import('@doist/cli-core/auth')
@@ -86,6 +91,23 @@ describe('registerAuthCommand', () => {
 
         expect(lines(log).length).toBe(1)
         expect(lines(log)[0]).toContain('Authenticated to Analytics as Ada')
+    })
+
+    it('hands the same refresh wiring to both `status` and `token view`', async () => {
+        // Sentinel only — never parsed here, so the real attachers never try
+        // to drive a refresh through it. cli-core's own suite covers what the
+        // attachers do with `refresh`; this guards that ol actually passes it.
+        const refresh = { provider: {}, lockPath: '/tmp/refresh.lock' }
+        const { getTokenRefreshOptions } = await import('../lib/auth.js')
+        vi.mocked(getTokenRefreshOptions).mockReturnValue(
+            refresh as unknown as ReturnType<typeof getTokenRefreshOptions>,
+        )
+        const { attachStatusCommand, attachTokenViewCommand } = await import('@doist/cli-core/auth')
+
+        await captureAttachOptions()
+
+        expect(vi.mocked(attachStatusCommand).mock.calls[0][1].refresh).toBe(refresh)
+        expect(vi.mocked(attachTokenViewCommand).mock.calls[0][1].refresh).toBe(refresh)
     })
 
     it('falls back to the default callback port when the env var is unparseable', async () => {
