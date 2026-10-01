@@ -1,3 +1,9 @@
+## [2.1.6](https://github.com/Doist/outline-cli/compare/v2.1.5...v2.1.6) (2026-10-01)
+
+### Bug Fixes
+
+* **deps:** update dependency undici to v7.30.0 ([#136](https://github.com/Doist/outline-cli/issues/136)) ([23acd1d](https://github.com/Doist/outline-cli/commit/23acd1d94f6ba5a792550b10b2ef8f6cb87a3f43))
+
 ## [2.1.5](https://github.com/Doist/outline-cli/compare/v2.1.4...v2.1.5) (2026-09-30)
 
 ### Bug Fixes
