@@ -66,11 +66,15 @@ export function outputList<T extends object>(
     }
 
     if (pagination?.nextPath && !opts.ndjson) {
-        console.log(
-            chalk.dim(
-                `\n(more results available — use --offset ${pagination.offset + pagination.limit})`,
-            ),
+        const hint = chalk.dim(
+            `\n(more results available — use --offset ${pagination.offset + pagination.limit})`,
         )
+        // In JSON mode stdout holds the JSON itself, so the hint goes to stderr to keep it parseable.
+        if (opts.json) {
+            console.error(hint)
+        } else {
+            console.log(hint)
+        }
     }
 }
 
