@@ -45,6 +45,26 @@ describe('search command', () => {
         expect(apiRequest).toHaveBeenCalledWith('documents.search', {
             query: 'test query',
             limit: 10,
+            offset: 0,
+        })
+    })
+
+    it('passes --offset, which the "more results" hint points to', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+            data: [],
+            pagination: { offset: 25, limit: 25 },
+        })
+
+        const { registerSearchCommand } = await import('./search.js')
+        const program = createTestProgram(registerSearchCommand)
+
+        await program.parseAsync(['node', 'ol', 'search', 'test query', '--offset', '25'])
+
+        expect(apiRequest).toHaveBeenCalledWith('documents.search', {
+            query: 'test query',
+            limit: 25,
+            offset: 25,
         })
     })
 

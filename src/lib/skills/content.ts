@@ -40,6 +40,7 @@ Documents can be referenced by:
 \`\`\`bash
 ol search "query"
 ol search "query" --limit 10
+ol search "query" --offset 25          # next page of results
 ol search "query" --collection <id>
 ol search "query" --status published
 ol search "query" --json

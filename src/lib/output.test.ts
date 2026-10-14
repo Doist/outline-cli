@@ -44,6 +44,24 @@ describe('output', () => {
         ])
     })
 
+    it('outputList human mode shows the pagination hint', () => {
+        outputList([item], formatter, keys, {}, { offset: 0, limit: 1, nextPath: '/next' })
+        expect(lines(log).join('\n')).toContain('use --offset 1')
+    })
+
+    it('outputList json mode keeps the pagination hint out of stdout', () => {
+        const error = captureConsole('error')
+        outputList(
+            [item],
+            formatter,
+            keys,
+            { json: true },
+            { offset: 0, limit: 1, nextPath: '/next' },
+        )
+        expect(JSON.parse(lines(log).join('\n'))).toEqual([{ id: '1', name: 'Test' }])
+        expect(lines(error).join('\n')).toContain('use --offset 1')
+    })
+
     it('getOutputOptions parses flags', () => {
         expect(getOutputOptions({ json: true, full: true, ndjson: false })).toEqual({
             json: true,

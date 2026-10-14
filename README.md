@@ -112,7 +112,7 @@ Self-hosted instances: pass `--base-url` or set `OUTLINE_URL` (you can still pro
 
 ```bash
 # Search
-ol search "query" --limit 10 --collection <id> --status published
+ol search "query" --limit 10 --offset 10 --collection <id> --status published
 
 # Documents (alias: ol doc)
 ol document list --collection <id> --sort updatedAt --direction DESC

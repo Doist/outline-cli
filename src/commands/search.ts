@@ -38,6 +38,7 @@ export function registerSearchCommand(program: Command): void {
         .command('search <query>')
         .description('Search documents')
         .option('--limit <n>', 'Max results', '25')
+        .option('--offset <n>', 'Pagination offset', '0')
         .option('--collection <id>', 'Filter by collection ID')
         .option('--status <status>', 'Filter by status (published|draft|archived)')
         .option('--json', 'Output JSON')
@@ -47,6 +48,7 @@ export function registerSearchCommand(program: Command): void {
             const body: Record<string, unknown> = {
                 query,
                 limit: Number(opts.limit),
+                offset: Number(opts.offset),
             }
             if (opts.collection) body.collectionId = opts.collection
             if (opts.status) body.statusFilter = [opts.status]
