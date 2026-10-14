@@ -1,3 +1,9 @@
+## [2.1.9](https://github.com/Doist/outline-cli/compare/v2.1.8...v2.1.9) (2026-10-14)
+
+### Bug Fixes
+
+* **search:** accept --offset, which the more-results hint suggests ([#148](https://github.com/Doist/outline-cli/issues/148)) ([0b3dc79](https://github.com/Doist/outline-cli/commit/0b3dc79222fe52c19f3329f8bedd2c747b32e104))
+
 ## [2.1.8](https://github.com/Doist/outline-cli/compare/v2.1.7...v2.1.8) (2026-10-12)
 
 ### Bug Fixes
