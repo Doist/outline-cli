@@ -68,6 +68,8 @@ ol doc move <id> --parent <ref>                    # Nest under parent (collecti
 ol doc archive <id>
 ol doc unarchive <id>
 ol doc delete <id> --confirm
+ol doc restore <id>                       # Restore from trash (ID or URL; trashed docs aren't found by title)
+ol doc restore <id> --collection <ref>    # Restore into another collection (required if the original is gone)
 ```
 
 ### Collections
