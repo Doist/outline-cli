@@ -194,6 +194,7 @@ export function registerDocumentCommand(program: Command): void {
         .option('--title <title>', 'New title')
         .option('--text <text>', 'New body (markdown)')
         .option('--file <path>', 'Read markdown from file')
+        .option('--publish', 'Publish a draft')
         .option('--json', 'Output JSON')
         .action(async (id: string, opts) => {
             const resolvedId = await resolveDocumentId(id)
@@ -208,6 +209,7 @@ export function registerDocumentCommand(program: Command): void {
                 if (rawText) body.text = rawText
                 if (opts.title) body.title = opts.title
             }
+            if (opts.publish) body.publish = true
 
             const { data } = await apiRequest<Document>('documents.update', body)
 

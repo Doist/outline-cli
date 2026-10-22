@@ -234,6 +234,30 @@ describe('document commands', () => {
         mockExit.mockRestore()
     })
 
+    it('document update --publish publishes without changing title or text', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+            data: {
+                id: 'doc-id',
+                title: 'Draft',
+                urlId: 'abc123',
+                collectionId: 'c1',
+                updatedAt: '2024-01-01T00:00:00Z',
+            },
+        })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync(['node', 'ol', 'document', 'update', 'abc123', '--publish'])
+
+        expect(apiRequest).toHaveBeenLastCalledWith('documents.update', {
+            id: 'doc-id',
+            publish: true,
+        })
+        expect(lines(log)[0]).toContain('Updated: Draft')
+    })
+
     it('document move with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
