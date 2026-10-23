@@ -234,6 +234,87 @@ describe('document commands', () => {
         mockExit.mockRestore()
     })
 
+    it('document update --publish publishes without changing title or text', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+            data: {
+                id: 'doc-id',
+                title: 'Draft',
+                urlId: 'abc123',
+                collectionId: 'c1',
+                updatedAt: '2024-01-01T00:00:00Z',
+            },
+        })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync(['node', 'ol', 'document', 'update', 'abc123', '--publish'])
+
+        expect(apiRequest).toHaveBeenLastCalledWith('documents.update', {
+            id: 'doc-id',
+            publish: true,
+        })
+        expect(lines(log)[0]).toContain('Published: Draft')
+    })
+
+    it('document update --publish --collection sends the resolved collectionId', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+        mockApiRequest.mockImplementation((endpoint: string) => {
+            if (endpoint === 'collections.info') {
+                return Promise.resolve({ data: { id: 'col-id', name: 'Engineering' } })
+            }
+            return Promise.resolve({ data: { id: 'doc-id', title: 'Draft', urlId: 'abc123' } })
+        })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync([
+            'node',
+            'ol',
+            'document',
+            'update',
+            'abc123',
+            '--publish',
+            '--collection',
+            'colABC1',
+        ])
+
+        expect(mockApiRequest).toHaveBeenLastCalledWith('documents.update', {
+            id: 'doc-id',
+            publish: true,
+            collectionId: 'col-id',
+        })
+    })
+
+    it('document update --collection without --publish errors before any API call', async () => {
+        const mockExit = mockProcessExit()
+        const errorSpy = captureConsole('error')
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockClear()
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await expect(
+            program.parseAsync([
+                'node',
+                'ol',
+                'document',
+                'update',
+                'abc123',
+                '--collection',
+                'colABC1',
+            ]),
+        ).rejects.toThrow('process.exit(1)')
+
+        expect(lines(errorSpy).join(' ')).toContain('--collection requires --publish')
+        expect(apiRequest).not.toHaveBeenCalled()
+        mockExit.mockRestore()
+    })
+
     it('document move with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>

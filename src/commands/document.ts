@@ -194,8 +194,18 @@ export function registerDocumentCommand(program: Command): void {
         .option('--title <title>', 'New title')
         .option('--text <text>', 'New body (markdown)')
         .option('--file <path>', 'Read markdown from file')
+        .option('--publish', 'Publish a draft')
+        .option('--collection <ref>', 'Collection to publish into (drafts without one only)')
         .option('--json', 'Output JSON')
         .action(async (id: string, opts) => {
+            if (opts.collection && !opts.publish) {
+                console.error(
+                    formatError('MISSING_OPTION', '--collection requires --publish.', [
+                        'Use doc move to move a document to another collection',
+                    ]),
+                )
+                process.exit(1)
+            }
             const resolvedId = await resolveDocumentId(id)
             const body: Record<string, unknown> = { id: resolvedId }
 
@@ -208,13 +218,18 @@ export function registerDocumentCommand(program: Command): void {
                 if (rawText) body.text = rawText
                 if (opts.title) body.title = opts.title
             }
+            if (opts.publish) body.publish = true
+            if (opts.collection) {
+                body.collectionId = await resolveCollectionId(opts.collection)
+            }
 
             const { data } = await apiRequest<Document>('documents.update', body)
 
             if (opts.json) {
                 outputItem(data, formatDoc, essentialKeys, { json: true })
             } else {
-                console.log(chalk.green(`Updated: ${data.title}`), chalk.dim(data.urlId))
+                const verb = opts.publish ? 'Published' : 'Updated'
+                console.log(chalk.green(`${verb}: ${data.title}`), chalk.dim(data.urlId))
             }
         })
 

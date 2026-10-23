@@ -121,6 +121,8 @@ ol document get <urlId> --raw        # outputs raw markdown
 ol document open <urlId>             # opens in browser
 ol document create --title "Title" --collection <id> --file doc.md --publish
 ol document update <urlId> --file updated.md
+ol document update <urlId> --publish # publishes a draft
+ol document update <urlId> --publish --collection <id> # publishes a draft that has no collection
 ol document delete <urlId> --confirm
 ol document move <urlId> --collection <target-id>
 ol document archive <urlId>

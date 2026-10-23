@@ -59,6 +59,8 @@ ol doc create --title "Title" --parent <ref> --text "# Content"  # Nest under pa
 ol doc create --title "Title" --collection <id> --file ./doc.md
 ol doc update <id> --title "New Title"
 ol doc update <id> --file ./updated.md
+ol doc update <id> --publish              # Publish a draft (create makes drafts unless --publish)
+ol doc update <id> --publish --collection <ref>     # Publish a draft that has no collection (web UI drafts)
 ol doc move <id> --collection <target-id>           # Move to collection root
 ol doc move <id> --parent <ref>                    # Nest under parent (collection inferred)
 ol doc archive <id>
