@@ -61,6 +61,7 @@ ol doc update <id> --title "New Title"
 ol doc update <id> --file ./updated.md
 ol doc update <id> --publish              # Publish a draft (create makes drafts unless --publish)
 ol doc update <id> --publish --collection <ref>     # Publish a draft that has no collection (web UI drafts)
+ol doc update <id> --file ./doc.md --if-updated-at <updatedAt>  # Fail if the doc was saved since <updatedAt> (see Examples)
 ol doc move <id> --collection <target-id>           # Move to collection root
 ol doc move <id> --parent <ref>                    # Nest under parent (collection inferred)
 ol doc archive <id>
@@ -135,6 +136,14 @@ ol doc get <urlId>
 \`\`\`bash
 ol doc create --title "Meeting Notes" --collection <id> --file ./notes.md --publish
 \`\`\`
+
+### Edit a document without overwriting someone else's changes
+\`\`\`bash
+ts=$(ol doc get <id> --json | jq -r '.updatedAt')
+ol doc get <id> --raw > doc.md            # then edit doc.md
+ol doc update <id> --file doc.md --if-updated-at "$ts"
+\`\`\`
+If the document was saved after \`$ts\`, the update fails with \`DOCUMENT_CHANGED\`, or with Outline's "Document has been modified since the provided revision" when the save lands during the update; re-read and retry. Edits not yet saved from an open editor are not detected.
 
 ### List all collections and their documents
 \`\`\`bash

@@ -196,6 +196,7 @@ export function registerDocumentCommand(program: Command): void {
         .option('--file <path>', 'Read markdown from file')
         .option('--publish', 'Publish a draft')
         .option('--collection <ref>', 'Collection to publish into (drafts without one only)')
+        .option('--if-updated-at <timestamp>', 'Fail if updatedAt differs (from doc get --json)')
         .option('--json', 'Output JSON')
         .action(async (id: string, opts) => {
             if (opts.collection && !opts.publish) {
@@ -206,8 +207,34 @@ export function registerDocumentCommand(program: Command): void {
                 )
                 process.exit(1)
             }
-            const resolvedId = await resolveDocumentId(id)
-            const body: Record<string, unknown> = { id: resolvedId }
+            if (opts.ifUpdatedAt !== undefined && Number.isNaN(Date.parse(opts.ifUpdatedAt))) {
+                console.error(
+                    formatError(
+                        'INVALID_TIMESTAMP',
+                        `--if-updated-at needs a timestamp, got "${opts.ifUpdatedAt}".`,
+                        ['Pass the updatedAt value printed by ol doc get --json'],
+                    ),
+                )
+                process.exit(1)
+            }
+            const current = (await resolveDocumentRef(id)) as Document
+            if (
+                opts.ifUpdatedAt !== undefined &&
+                Date.parse(current.updatedAt) !== Date.parse(opts.ifUpdatedAt)
+            ) {
+                console.error(
+                    formatError(
+                        'DOCUMENT_CHANGED',
+                        `Document was updated at ${current.updatedAt}, not ${opts.ifUpdatedAt}.`,
+                        ['Run ol doc get again, reapply your changes, then retry'],
+                    ),
+                )
+                process.exit(1)
+            }
+            const body: Record<string, unknown> = { id: current.id }
+            // Outline rejects the write if the document was saved after this revision,
+            // which covers edits landing between the check above and this update
+            if (opts.ifUpdatedAt !== undefined) body.lastRevision = current.revision
 
             const rawText = readTextInput(opts)
             if (rawText && !opts.title) {

@@ -315,6 +315,107 @@ describe('document commands', () => {
         mockExit.mockRestore()
     })
 
+    it('document update --if-updated-at refuses to write when the document changed', async () => {
+        const mockExit = mockProcessExit()
+        const errorSpy = captureConsole('error')
+        const { apiRequest } = await import('../lib/api.js')
+        const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+        mockApiRequest.mockClear()
+        mockApiRequest.mockResolvedValue({
+            data: {
+                id: 'doc-id',
+                title: 'Doc',
+                updatedAt: '2026-01-02T00:00:00.000Z',
+                revision: 8,
+            },
+        })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await expect(
+            program.parseAsync([
+                'node',
+                'ol',
+                'document',
+                'update',
+                'abc123',
+                '--title',
+                'New',
+                '--if-updated-at',
+                '2026-01-01T00:00:00.000Z',
+            ]),
+        ).rejects.toThrow('process.exit(1)')
+
+        expect(lines(errorSpy).join(' ')).toContain('DOCUMENT_CHANGED')
+        expect(mockApiRequest).not.toHaveBeenCalledWith('documents.update', expect.anything())
+        mockExit.mockRestore()
+    })
+
+    it('document update --if-updated-at sends lastRevision when the document is unchanged', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+            data: {
+                id: 'doc-id',
+                title: 'Doc',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                revision: 7,
+            },
+        })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync([
+            'node',
+            'ol',
+            'document',
+            'update',
+            'abc123',
+            '--title',
+            'New',
+            '--if-updated-at',
+            '2026-01-01T00:00:00.000Z',
+        ])
+
+        expect(apiRequest).toHaveBeenLastCalledWith('documents.update', {
+            id: 'doc-id',
+            title: 'New',
+            lastRevision: 7,
+        })
+    })
+
+    it.each(['', 'null'])(
+        'document update --if-updated-at %j is rejected before any API call',
+        async (value) => {
+            const mockExit = mockProcessExit()
+            const errorSpy = captureConsole('error')
+            const { apiRequest } = await import('../lib/api.js')
+            ;(apiRequest as ReturnType<typeof vi.fn>).mockClear()
+
+            const { registerDocumentCommand } = await import('./document.js')
+            const program = createTestProgram(registerDocumentCommand)
+
+            await expect(
+                program.parseAsync([
+                    'node',
+                    'ol',
+                    'document',
+                    'update',
+                    'abc123',
+                    '--title',
+                    'New',
+                    '--if-updated-at',
+                    value,
+                ]),
+            ).rejects.toThrow('process.exit(1)')
+
+            expect(lines(errorSpy).join(' ')).toContain('INVALID_TIMESTAMP')
+            expect(apiRequest).not.toHaveBeenCalled()
+            mockExit.mockRestore()
+        },
+    )
+
     it('document move with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
