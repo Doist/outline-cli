@@ -77,6 +77,28 @@ describe('resolveDocumentRef', () => {
         })
     })
 
+    it.each([
+        'https://wiki.example.com/doc/my-doc-AbC123',
+        'https://wiki.example.com/doc/my-doc-AbC123/',
+        'https://wiki.example.com/doc/my-doc-AbC123#setup',
+        'https://wiki.example.com/doc/my-doc-AbC123?q=x',
+        'https://wiki.example.com/doc/my-doc-AbC123/edit',
+        'https://wiki.example.com/doc/my-doc-AbC123/history/some-rev-id#h-intro',
+        'https://wiki.example.com/s/share-id/doc/my-doc-AbC123',
+        'https://wiki.example.com/doc/AbC123',
+        'https://wiki.example.com/doc/AbC123/edit',
+    ])('extracts ID from browser URL %s', async (url) => {
+        const mockDoc = { id: 'doc-uuid', title: 'My Doc', urlId: 'AbC123' }
+        mockApiRequest.mockResolvedValueOnce({ data: mockDoc })
+
+        const { resolveDocumentRef } = await import('./refs.js')
+        const result = await resolveDocumentRef(url)
+
+        expect(result).toEqual(mockDoc)
+        expect(mockApiRequest).toHaveBeenCalledTimes(1)
+        expect(mockApiRequest).toHaveBeenCalledWith('documents.info', { id: 'AbC123' })
+    })
+
     it('resolves document by exact name match (case-insensitive)', async () => {
         const mockDocs = ENG_PRODUCT_DOCS
         // "engineering guide" has spaces, doesn't look like an ID

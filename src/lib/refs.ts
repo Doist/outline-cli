@@ -44,6 +44,9 @@ function looksLikeId(input: string): boolean {
 /**
  * Extract document ID from URL or slug (document-only)
  * Only extracts from slugs (e.g., "my-doc-abc123" -> "abc123")
+ * In URLs, the slug is the segment after `/doc/`; trailing paths
+ * (`/edit`, `/history/...`), `?query` and `#anchor` are ignored, and a
+ * slug without a title (`/doc/<urlId>`) is the ID itself
  * Preserves full UUIDs and raw IDs
  */
 function extractDocumentIdFromSlug(input: string): string {
@@ -52,13 +55,14 @@ function extractDocumentIdFromSlug(input: string): string {
         return input
     }
     // If it looks like a URL, extract the slug suffix
+    const docSlug = input.match(/\/doc\/([^/?#]+)/)?.[1]
     const parts = input.replace(/\/$/, '').split('/')
-    const last = parts[parts.length - 1]
+    const last = docSlug ?? parts[parts.length - 1]
     // Outline URL IDs are the part after the last hyphen in the slug
     // Only extract if it's a slug with hyphen, not just a raw ID
     const match = last.match(/-([a-zA-Z0-9]+)$/)
     if (match) return match[1]
-    return input
+    return docSlug ?? input
 }
 
 /**
