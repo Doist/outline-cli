@@ -1,3 +1,9 @@
+## [2.2.0](https://github.com/Doist/outline-cli/compare/v2.1.12...v2.2.0) (2026-10-23)
+
+### Features
+
+* add `doc update --publish` to publish drafts ([#156](https://github.com/Doist/outline-cli/issues/156)) ([e155c92](https://github.com/Doist/outline-cli/commit/e155c92f7c02ace1e8693e546debd7a9077d39b5))
+
 ## [2.1.12](https://github.com/Doist/outline-cli/compare/v2.1.11...v2.1.12) (2026-10-23)
 
 ### Bug Fixes
