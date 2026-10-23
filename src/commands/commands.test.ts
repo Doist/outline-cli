@@ -385,6 +385,37 @@ describe('document commands', () => {
         })
     })
 
+    it.each(['', 'null'])(
+        'document update --if-updated-at %j is rejected before any API call',
+        async (value) => {
+            const mockExit = mockProcessExit()
+            const errorSpy = captureConsole('error')
+            const { apiRequest } = await import('../lib/api.js')
+            ;(apiRequest as ReturnType<typeof vi.fn>).mockClear()
+
+            const { registerDocumentCommand } = await import('./document.js')
+            const program = createTestProgram(registerDocumentCommand)
+
+            await expect(
+                program.parseAsync([
+                    'node',
+                    'ol',
+                    'document',
+                    'update',
+                    'abc123',
+                    '--title',
+                    'New',
+                    '--if-updated-at',
+                    value,
+                ]),
+            ).rejects.toThrow('process.exit(1)')
+
+            expect(lines(errorSpy).join(' ')).toContain('INVALID_TIMESTAMP')
+            expect(apiRequest).not.toHaveBeenCalled()
+            mockExit.mockRestore()
+        },
+    )
+
     it('document move with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>

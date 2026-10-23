@@ -207,9 +207,19 @@ export function registerDocumentCommand(program: Command): void {
                 )
                 process.exit(1)
             }
+            if (opts.ifUpdatedAt !== undefined && Number.isNaN(Date.parse(opts.ifUpdatedAt))) {
+                console.error(
+                    formatError(
+                        'INVALID_TIMESTAMP',
+                        `--if-updated-at needs a timestamp, got "${opts.ifUpdatedAt}".`,
+                        ['Pass the updatedAt value printed by ol doc get --json'],
+                    ),
+                )
+                process.exit(1)
+            }
             const current = (await resolveDocumentRef(id)) as Document
             if (
-                opts.ifUpdatedAt &&
+                opts.ifUpdatedAt !== undefined &&
                 Date.parse(current.updatedAt) !== Date.parse(opts.ifUpdatedAt)
             ) {
                 console.error(
@@ -224,7 +234,7 @@ export function registerDocumentCommand(program: Command): void {
             const body: Record<string, unknown> = { id: current.id }
             // Outline rejects the write if the document was saved after this revision,
             // which covers edits landing between the check above and this update
-            if (opts.ifUpdatedAt) body.lastRevision = current.revision
+            if (opts.ifUpdatedAt !== undefined) body.lastRevision = current.revision
 
             const rawText = readTextInput(opts)
             if (rawText && !opts.title) {
