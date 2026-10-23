@@ -1,3 +1,9 @@
+## [2.1.12](https://github.com/Doist/outline-cli/compare/v2.1.11...v2.1.12) (2026-10-23)
+
+### Bug Fixes
+
+* resolve document refs from browser URLs with anchors, queries or trailing paths ([#155](https://github.com/Doist/outline-cli/issues/155)) ([78b0087](https://github.com/Doist/outline-cli/commit/78b008750500ddf54adb6172fc151e0fdef2e647))
+
 ## [2.1.11](https://github.com/Doist/outline-cli/compare/v2.1.10...v2.1.11) (2026-10-21)
 
 ### Bug Fixes
