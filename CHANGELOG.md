@@ -1,3 +1,9 @@
+## [2.3.0](https://github.com/Doist/outline-cli/compare/v2.2.0...v2.3.0) (2026-10-23)
+
+### Features
+
+* add `doc update --if-updated-at` to refuse overwriting newer changes ([#157](https://github.com/Doist/outline-cli/issues/157)) ([7fd2e15](https://github.com/Doist/outline-cli/commit/7fd2e15c89ac5af7a779d6517778867d863bc3a2))
+
 ## [2.2.0](https://github.com/Doist/outline-cli/compare/v2.1.12...v2.2.0) (2026-10-23)
 
 ### Features
