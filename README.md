@@ -123,6 +123,7 @@ ol document create --title "Title" --collection <id> --file doc.md --publish
 ol document update <urlId> --file updated.md
 ol document update <urlId> --publish # publishes a draft
 ol document update <urlId> --publish --collection <id> # publishes a draft that has no collection
+ol document update <urlId> --file updated.md --if-updated-at <updatedAt> # fails if saved since then
 ol document delete <urlId> --confirm
 ol document move <urlId> --collection <target-id>
 ol document archive <urlId>
