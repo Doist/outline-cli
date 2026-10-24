@@ -269,6 +269,7 @@ describe('auth token view', () => {
         expect(storeMocks.setBundle).toHaveBeenCalledWith(
             STORED_ACCOUNT,
             expect.objectContaining({ accessToken: 'rotated-tok', refreshToken: 'rotated-rt' }),
+            { preserveStorage: true },
         )
         expect(out.mock.calls).toEqual([['rotated-tok']])
         // The stored-token read is bypassed entirely once a refresh ran.
