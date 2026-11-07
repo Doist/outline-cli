@@ -11,7 +11,10 @@ npm run dev           # watch mode (rebuild on changes)
 npm run type-check    # typecheck without emitting
 npm run test          # run all tests
 npx vitest run src/lib/output.test.ts  # run a single test file
-npm run format        # biome lint + format (auto-fix)
+npm run lint:check    # lint with oxlint
+npm run lint:write    # lint with oxlint and auto-fix
+npm run format        # format with oxfmt
+npm run format:check  # check formatting without writing
 ```
 
 After building, `npm link` makes the `ol` binary available globally.
@@ -63,7 +66,7 @@ A CI check (`npm run check:skill-sync`) runs on pull requests and will fail if `
 
 ## Style
 
-- Biome: tabs for indentation, auto-sorted imports
+- oxlint (`.oxlintrc.json`) for linting and oxfmt (`.oxfmtrc.json`) for formatting: 4-space indentation, single quotes, no semicolons, 100-character lines, auto-sorted imports. The lefthook pre-commit hook runs both on staged files
 - TypeScript strict mode, target ES2022, NodeNext modules
 - Avoid `any` types and forced typecasts
 - Prefer `for` loops over `.forEach()`
