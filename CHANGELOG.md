@@ -1,3 +1,9 @@
+## [2.5.0](https://github.com/Doist/outline-cli/compare/v2.4.0...v2.5.0) (2026-11-07)
+
+### Features
+
+* read markdown from stdin with `--stdin` ([#166](https://github.com/Doist/outline-cli/issues/166)) ([c82d17e](https://github.com/Doist/outline-cli/commit/c82d17e2963ea9ebb49520c68f4de0052ea30712))
+
 ## [2.4.0](https://github.com/Doist/outline-cli/compare/v2.3.2...v2.4.0) (2026-11-07)
 
 ### Features
