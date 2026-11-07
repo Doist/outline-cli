@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { text } from 'node:stream/consumers'
+import { readStdin } from '@doist/cli-core'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import open from 'open'
@@ -37,8 +37,27 @@ function formatDocFull(doc: Document): string {
     return `# ${doc.title}\n\n${doc.text}`
 }
 
-async function readTextInput(opts: { text?: string; file?: string }): Promise<string | undefined> {
-    if (opts.file === '-') return text(process.stdin)
+type TextInputOptions = { text?: string; file?: string; stdin?: boolean }
+
+function exitOnConflictingTextInputs(opts: TextInputOptions): void {
+    const given = [opts.text !== undefined, opts.file !== undefined, opts.stdin === true]
+    if (given.filter(Boolean).length > 1) {
+        console.error(
+            formatError(
+                'CONFLICTING_OPTIONS',
+                '--text, --file and --stdin are mutually exclusive.',
+                ['Pass the document body with only one of them'],
+            ),
+        )
+        process.exit(1)
+    }
+}
+
+// Read before any API call, so a bad --file path or a --stdin with nothing
+// piped in fails without a network round-trip.
+async function readTextInput(opts: TextInputOptions): Promise<string | undefined> {
+    exitOnConflictingTextInputs(opts)
+    if (opts.stdin) return readStdin()
     if (opts.file) return readFileSync(opts.file, 'utf-8')
     return opts.text
 }
@@ -133,7 +152,8 @@ export function registerDocumentCommand(program: Command): void {
         .option('--collection <ref>', 'Collection ID or name')
         .option('--parent <ref>', 'Parent document ID, URL, or name')
         .option('--text <text>', 'Document body (markdown)')
-        .option('--file <path>', 'Read markdown from file (- for stdin)')
+        .option('--file <path>', 'Read markdown from file')
+        .option('--stdin', 'Read markdown from stdin')
         .option('--publish', 'Publish immediately')
         .option('--json', 'Output JSON')
         .action(async (opts) => {
@@ -164,6 +184,7 @@ export function registerDocumentCommand(program: Command): void {
                 process.exit(1)
             }
 
+            const inputText = await readTextInput(opts)
             const body: Record<string, unknown> = {
                 title: opts.title,
             }
@@ -178,7 +199,6 @@ export function registerDocumentCommand(program: Command): void {
                 body.collectionId = (parent as Document).collectionId
             }
 
-            const inputText = await readTextInput(opts)
             if (inputText) body.text = inputText
             if (opts.publish) body.publish = true
 
@@ -195,7 +215,8 @@ export function registerDocumentCommand(program: Command): void {
         .description('Update a document')
         .option('--title <title>', 'New title')
         .option('--text <text>', 'New body (markdown)')
-        .option('--file <path>', 'Read markdown from file (- for stdin)')
+        .option('--file <path>', 'Read markdown from file')
+        .option('--stdin', 'Read markdown from stdin')
         .option('--publish', 'Publish a draft')
         .option('--collection <ref>', 'Collection to publish into (drafts without one only)')
         .option('--if-updated-at <timestamp>', 'Fail if updatedAt differs (from doc get --json)')
@@ -219,6 +240,7 @@ export function registerDocumentCommand(program: Command): void {
                 )
                 process.exit(1)
             }
+            const rawText = await readTextInput(opts)
             const current = (await resolveDocumentRef(id)) as Document
             if (
                 opts.ifUpdatedAt !== undefined &&
@@ -238,7 +260,6 @@ export function registerDocumentCommand(program: Command): void {
             // which covers edits landing between the check above and this update
             if (opts.ifUpdatedAt !== undefined) body.lastRevision = current.revision
 
-            const rawText = await readTextInput(opts)
             if (rawText && !opts.title) {
                 const { title, body: textBody } = extractTitleFromText(rawText)
                 if (title) body.title = title

@@ -121,7 +121,7 @@ ol document get <urlId> --raw        # outputs raw markdown
 ol document open <urlId>             # opens in browser
 ol document create --title "Title" --collection <id> --file doc.md --publish
 ol document update <urlId> --file updated.md
-cat notes.md | ol document update <urlId> --file - # reads markdown from stdin
+cat notes.md | ol document update <urlId> --stdin # reads markdown from stdin
 ol document update <urlId> --publish # publishes a draft
 ol document update <urlId> --publish --collection <id> # publishes a draft that has no collection
 ol document update <urlId> --file updated.md --if-updated-at <updatedAt> # fails if saved since then
