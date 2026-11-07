@@ -416,6 +416,42 @@ describe('document commands', () => {
         },
     )
 
+    it('document restore passes the resolved document and --collection', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+        mockApiRequest.mockImplementation((endpoint: string) => {
+            if (endpoint === 'documents.info') {
+                return Promise.resolve({ data: { id: 'doc-id', title: 'Trashed' } })
+            }
+            if (endpoint === 'collections.info') {
+                return Promise.resolve({ data: { id: 'col-id', name: 'Engineering' } })
+            }
+            if (endpoint === 'documents.restore') {
+                return Promise.resolve({ data: { id: 'doc-id', title: 'Trashed' } })
+            }
+            return Promise.reject(new Error(`Unexpected endpoint: ${endpoint}`))
+        })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync([
+            'node',
+            'ol',
+            'document',
+            'restore',
+            'abc123',
+            '--collection',
+            'colABC1',
+        ])
+
+        expect(mockApiRequest).toHaveBeenCalledWith('documents.restore', {
+            id: 'doc-id',
+            collectionId: 'col-id',
+        })
+        expect(lines(log)[0]).toBe('Restored.')
+    })
+
     it('document move with --parent infers collectionId from parent', async () => {
         const { apiRequest } = await import('../lib/api.js')
         const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
