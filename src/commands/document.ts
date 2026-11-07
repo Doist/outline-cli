@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { text } from 'node:stream/consumers'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import open from 'open'
@@ -36,7 +37,8 @@ function formatDocFull(doc: Document): string {
     return `# ${doc.title}\n\n${doc.text}`
 }
 
-function readTextInput(opts: { text?: string; file?: string }): string | undefined {
+async function readTextInput(opts: { text?: string; file?: string }): Promise<string | undefined> {
+    if (opts.file === '-') return text(process.stdin)
     if (opts.file) return readFileSync(opts.file, 'utf-8')
     return opts.text
 }
@@ -131,7 +133,7 @@ export function registerDocumentCommand(program: Command): void {
         .option('--collection <ref>', 'Collection ID or name')
         .option('--parent <ref>', 'Parent document ID, URL, or name')
         .option('--text <text>', 'Document body (markdown)')
-        .option('--file <path>', 'Read markdown from file')
+        .option('--file <path>', 'Read markdown from file (- for stdin)')
         .option('--publish', 'Publish immediately')
         .option('--json', 'Output JSON')
         .action(async (opts) => {
@@ -176,8 +178,8 @@ export function registerDocumentCommand(program: Command): void {
                 body.collectionId = (parent as Document).collectionId
             }
 
-            const text = readTextInput(opts)
-            if (text) body.text = text
+            const inputText = await readTextInput(opts)
+            if (inputText) body.text = inputText
             if (opts.publish) body.publish = true
 
             const { data } = await apiRequest<Document>('documents.create', body)
@@ -193,7 +195,7 @@ export function registerDocumentCommand(program: Command): void {
         .description('Update a document')
         .option('--title <title>', 'New title')
         .option('--text <text>', 'New body (markdown)')
-        .option('--file <path>', 'Read markdown from file')
+        .option('--file <path>', 'Read markdown from file (- for stdin)')
         .option('--publish', 'Publish a draft')
         .option('--collection <ref>', 'Collection to publish into (drafts without one only)')
         .option('--if-updated-at <timestamp>', 'Fail if updatedAt differs (from doc get --json)')
@@ -236,7 +238,7 @@ export function registerDocumentCommand(program: Command): void {
             // which covers edits landing between the check above and this update
             if (opts.ifUpdatedAt !== undefined) body.lastRevision = current.revision
 
-            const rawText = readTextInput(opts)
+            const rawText = await readTextInput(opts)
             if (rawText && !opts.title) {
                 const { title, body: textBody } = extractTitleFromText(rawText)
                 if (title) body.title = title

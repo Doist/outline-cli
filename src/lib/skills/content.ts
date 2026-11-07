@@ -59,6 +59,7 @@ ol doc create --title "Title" --parent <ref> --text "# Content"  # Nest under pa
 ol doc create --title "Title" --collection <id> --file ./doc.md
 ol doc update <id> --title "New Title"
 ol doc update <id> --file ./updated.md
+generate-notes | ol doc update <id> --file -   # --file - reads markdown from stdin (create and update)
 ol doc update <id> --publish              # Publish a draft (create makes drafts unless --publish)
 ol doc update <id> --publish --collection <ref>     # Publish a draft that has no collection (web UI drafts)
 ol doc update <id> --file ./doc.md --if-updated-at <updatedAt>  # Fail if the doc was saved since <updatedAt> (see Examples)
