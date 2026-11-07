@@ -350,4 +350,20 @@ export function registerDocumentCommand(program: Command): void {
             await apiRequest('documents.unarchive', { id: resolvedId })
             console.log('Unarchived.')
         })
+
+    doc.command('restore <id>')
+        .description('Restore a deleted document from the trash')
+        .option(
+            '--collection <ref>',
+            'Collection ID or name to restore into instead of the original (required if it is gone)',
+        )
+        .action(async (id: string, opts) => {
+            const resolvedId = await resolveDocumentId(id)
+            const body: Record<string, unknown> = { id: resolvedId }
+            if (opts.collection) {
+                body.collectionId = await resolveCollectionId(opts.collection)
+            }
+            await apiRequest('documents.restore', body)
+            console.log('Restored.')
+        })
 }
