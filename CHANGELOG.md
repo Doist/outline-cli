@@ -1,3 +1,9 @@
+## [2.4.0](https://github.com/Doist/outline-cli/compare/v2.3.2...v2.4.0) (2026-11-07)
+
+### Features
+
+* add `doc restore` to restore documents from the trash ([#165](https://github.com/Doist/outline-cli/issues/165)) ([b1e86eb](https://github.com/Doist/outline-cli/commit/b1e86eb21ef299e6b2c524eddeadc55b0b092c02))
+
 ## [2.3.2](https://github.com/Doist/outline-cli/compare/v2.3.1...v2.3.2) (2026-11-02)
 
 ### Bug Fixes
