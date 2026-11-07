@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lines, mockOutlineAuthModule, mockProcessExit } from '../_fixtures/testing.js'
@@ -256,6 +257,27 @@ describe('document commands', () => {
             publish: true,
         })
         expect(lines(log)[0]).toContain('Published: Draft')
+    })
+
+    it('document update --file - reads markdown from stdin', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+            data: { id: 'doc-id', title: 'From stdin', urlId: 'abc123', collectionId: 'c1' },
+        })
+        vi.spyOn(process, 'stdin', 'get').mockReturnValue(
+            Readable.from(['# From stdin\n\n', 'Body.\n']) as typeof process.stdin,
+        )
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync(['node', 'ol', 'document', 'update', 'abc123', '--file', '-'])
+
+        expect(apiRequest).toHaveBeenLastCalledWith('documents.update', {
+            id: 'doc-id',
+            title: 'From stdin',
+            text: 'Body.\n',
+        })
     })
 
     it('document update --publish --collection sends the resolved collectionId', async () => {
