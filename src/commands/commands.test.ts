@@ -1,4 +1,4 @@
-import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
+import { captureConsole, createTestProgram, mockStdin } from '@doist/cli-core/testing'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lines, mockOutlineAuthModule, mockProcessExit } from '../_fixtures/testing.js'
 
@@ -256,6 +256,107 @@ describe('document commands', () => {
             publish: true,
         })
         expect(lines(log)[0]).toContain('Published: Draft')
+    })
+
+    it('document update --stdin reads markdown from stdin, taking the title from its heading', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+            data: { id: 'doc-id', title: 'From stdin', urlId: 'abc123', collectionId: 'c1' },
+        })
+        mockStdin(['# From stdin\n\n', 'Body.\n'])
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync(['node', 'ol', 'document', 'update', 'abc123', '--stdin'])
+
+        expect(apiRequest).toHaveBeenLastCalledWith('documents.update', {
+            id: 'doc-id',
+            title: 'From stdin',
+            text: 'Body.\n',
+        })
+    })
+
+    it('document create --stdin sends the piped markdown as the body', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        const mockApiRequest = apiRequest as ReturnType<typeof vi.fn>
+        mockApiRequest.mockImplementation((endpoint: string) => {
+            if (endpoint === 'collections.info') {
+                return Promise.resolve({
+                    data: { id: '0e3b6a4c-5d1f-4a7e-9b2c-8f1d3e5a7b9c', name: 'Notes' },
+                })
+            }
+            return Promise.resolve({
+                data: {
+                    id: 'new-id',
+                    title: 'Standup',
+                    urlId: 'standup-xyz',
+                    collectionId: '0e3b6a4c-5d1f-4a7e-9b2c-8f1d3e5a7b9c',
+                },
+            })
+        })
+        mockStdin('# Standup\n\n- Shipped stdin support\n')
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await program.parseAsync([
+            'node',
+            'ol',
+            'document',
+            'create',
+            '--title',
+            'Standup',
+            '--collection',
+            '0e3b6a4c-5d1f-4a7e-9b2c-8f1d3e5a7b9c',
+            '--stdin',
+        ])
+
+        expect(mockApiRequest).toHaveBeenLastCalledWith('documents.create', {
+            title: 'Standup',
+            collectionId: '0e3b6a4c-5d1f-4a7e-9b2c-8f1d3e5a7b9c',
+            text: '# Standup\n\n- Shipped stdin support\n',
+        })
+    })
+
+    it.each([
+        [['--text', 'Inline', '--stdin']],
+        [['--file', './notes.md', '--stdin']],
+        [['--text', 'Inline', '--file', './notes.md']],
+    ])('document update with %j errors before calling the API', async (flags) => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockClear()
+        const mockExit = mockProcessExit()
+        const errorSpy = captureConsole('error')
+        mockStdin('# Piped\n')
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await expect(
+            program.parseAsync(['node', 'ol', 'document', 'update', 'abc123', ...flags]),
+        ).rejects.toThrow('process.exit(1)')
+
+        expect(lines(errorSpy).join(' ')).toContain('CONFLICTING_OPTIONS')
+        expect(lines(errorSpy).join(' ')).toContain(
+            '--text, --file and --stdin are mutually exclusive.',
+        )
+        expect(apiRequest).not.toHaveBeenCalled()
+        mockExit.mockRestore()
+    })
+
+    it('document update --stdin on a terminal fails with STDIN_IS_TTY before calling the API', async () => {
+        const { apiRequest } = await import('../lib/api.js')
+        ;(apiRequest as ReturnType<typeof vi.fn>).mockClear()
+        mockStdin('', { isTTY: true })
+
+        const { registerDocumentCommand } = await import('./document.js')
+        const program = createTestProgram(registerDocumentCommand)
+
+        await expect(
+            program.parseAsync(['node', 'ol', 'document', 'update', 'abc123', '--stdin']),
+        ).rejects.toMatchObject({ code: 'STDIN_IS_TTY' })
+        expect(apiRequest).not.toHaveBeenCalled()
     })
 
     it('document update --publish --collection sends the resolved collectionId', async () => {
