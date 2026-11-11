@@ -11,6 +11,7 @@ import { registerSkillCommand } from './commands/skill.js'
 import { registerUpdateCommand } from './commands/update/index.js'
 import { BaseCliError } from './lib/errors.js'
 import { applyUserSelector, isJsonMode } from './lib/global-args.js'
+import { printMovedNotice } from './lib/moved.js'
 import { formatError, formatErrorJson } from './lib/output.js'
 
 const program = new Command()
@@ -41,6 +42,8 @@ registerCollectionCommand(program)
 registerSkillCommand(program)
 registerChangelogCommand(program)
 registerUpdateCommand(program)
+
+printMovedNotice()
 
 function reportError(err: unknown): never {
     if (err instanceof BaseCliError) {
