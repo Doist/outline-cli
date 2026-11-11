@@ -31,7 +31,7 @@ Each file in `src/commands/` exports a `registerXxxCommand(program)` function th
 
 - **api.ts**: Single `apiRequest<T>(path, body)` function. All Outline API calls are POST with Bearer auth. Wraps requests in spinner with per-endpoint messages (SPINNER_MESSAGES map).
 - **auth.ts**: Config stored at `~/.config/outline-cli/config.json`. Token/URL resolution: env var → config file → default.
-- **output.ts**: `outputItem()` and `outputList()` handle three output modes (human/json/ndjson). Commands define a `humanFormatter` function and an `essentialKeys` array for JSON field filtering. `formatError` / `formatErrorJson` accept either positional `(code, message, hints?)` or a `BaseCliError` instance — errors thrown by `@doist/cli-core` helpers (e.g. the delegated `changelog` command) route through the top-level `parseAsync().catch` in `src/index.ts`, which dispatches via `isJsonMode()`.
+- **output.ts**: `outputItem()` and `outputList()` handle three output modes (human/json/ndjson). Commands define a `humanFormatter` function and an `essentialKeys` array for JSON field filtering. `formatError` / `formatErrorJson` accept either positional `(code, message, hints?)` or a `BaseCliError` instance — errors thrown by `@todoist/cli-core` helpers (e.g. the delegated `changelog` command) route through the top-level `parseAsync().catch` in `src/index.ts`, which dispatches via `isJsonMode()`.
 - **spinner.ts**: `withSpinner(opts, fn)` wrapper using yocto-spinner. Auto-disables on non-TTY, JSON output, CI, `--no-spinner` flag.
 - **markdown.ts**: Terminal markdown rendering via marked + marked-terminal.
 
@@ -47,8 +47,8 @@ Vitest with module mocking. Tests are colocated next to the source they cover (`
 
 - Mock `apiRequest` with `vi.mock()`
 - Stub `fetch` globally for API tests
-- Capture output with `captureConsole(method?)` / `captureStream(stream?)` from `@doist/cli-core/testing` (auto-restoring spies); read `spy.mock.calls` for assertions
-- Build the command harness with `createTestProgram(register)` from `@doist/cli-core/testing` (applies `exitOverride()`), then `program.parseAsync()`
+- Capture output with `captureConsole(method?)` / `captureStream(stream?)` from `@todoist/cli-core/testing` (auto-restoring spies); read `spy.mock.calls` for assertions
+- Build the command harness with `createTestProgram(register)` from `@todoist/cli-core/testing` (applies `exitOverride()`), then `program.parseAsync()`
 - Auth tests use tmpdir with `process.pid` for filesystem isolation
 
 ## Skill Content (Agent Command Reference)

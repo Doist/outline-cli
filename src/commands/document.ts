@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { readStdin } from '@doist/cli-core'
+import { readStdin } from '@todoist/cli-core'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import open from 'open'

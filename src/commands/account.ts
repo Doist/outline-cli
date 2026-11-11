@@ -1,9 +1,9 @@
-import { emitView } from '@doist/cli-core'
+import { emitView } from '@todoist/cli-core'
 import {
     attachAccountListCommand,
     attachAccountRemoveCommand,
     attachAccountUseCommand,
-} from '@doist/cli-core/auth'
+} from '@todoist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { TOKEN_ENV_VAR } from '../lib/auth-constants.js'

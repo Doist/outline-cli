@@ -92,7 +92,7 @@ To test features before publishing a stable release:
 ### Installing a pre-release
 
 ```sh
-npm install @doist/outline-cli@next
+npm install @todoist/outline-cli@next
 ```
 
 ## License

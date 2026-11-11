@@ -15,8 +15,8 @@ const createSpinnerMock = vi.fn(() => ({
     resetEarlySpinner: vi.fn(),
 }))
 
-vi.mock('@doist/cli-core', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@doist/cli-core')>()
+vi.mock('@todoist/cli-core', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@todoist/cli-core')>()
     return {
         ...actual,
         createSpinner: createSpinnerMock,

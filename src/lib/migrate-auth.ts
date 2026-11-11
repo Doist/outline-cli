@@ -1,4 +1,4 @@
-import { type MigrateAuthResult, migrateLegacyAuth } from '@doist/cli-core/auth'
+import { type MigrateAuthResult, migrateLegacyAuth } from '@todoist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import {
     LEGACY_CLEAR_PAYLOAD,

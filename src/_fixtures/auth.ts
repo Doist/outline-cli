@@ -1,4 +1,4 @@
-import type { MigrateAuthResult } from '@doist/cli-core/auth'
+import type { MigrateAuthResult } from '@todoist/cli-core/auth'
 import type { Config, StoredUser } from '../lib/config.js'
 import type { OutlineAccount } from '../lib/outline-account.js'
 

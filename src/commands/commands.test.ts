@@ -1,4 +1,4 @@
-import { captureConsole, createTestProgram, mockStdin } from '@doist/cli-core/testing'
+import { captureConsole, createTestProgram, mockStdin } from '@todoist/cli-core/testing'
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lines, mockOutlineAuthModule, mockProcessExit } from '../_fixtures/testing.js'
 

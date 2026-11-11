@@ -1,4 +1,4 @@
-import type { TokenStorageResult } from '@doist/cli-core/auth'
+import type { TokenStorageResult } from '@todoist/cli-core/auth'
 import chalk from 'chalk'
 import type { OutlineTokenStore } from './auth-provider.js'
 

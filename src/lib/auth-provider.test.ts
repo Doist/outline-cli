@@ -1,5 +1,5 @@
 import { Writable } from 'node:stream'
-import { captureStream } from '@doist/cli-core/testing'
+import { captureStream } from '@todoist/cli-core/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     AUTH_INFO,
@@ -39,8 +39,8 @@ const keyringMocks = vi.hoisted(() => ({
     },
 }))
 
-vi.mock('@doist/cli-core/auth', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@doist/cli-core/auth')>()
+vi.mock('@todoist/cli-core/auth', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@todoist/cli-core/auth')>()
     keyringMocks.createKeyringTokenStore.mockImplementation(() => keyringMocks.inner)
     return {
         ...actual,

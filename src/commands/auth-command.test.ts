@@ -1,4 +1,4 @@
-import { captureConsole, createTestProgram } from '@doist/cli-core/testing'
+import { captureConsole, createTestProgram } from '@todoist/cli-core/testing'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_INFO, TWO_USER_CONFIG } from '../_fixtures/auth.js'
@@ -24,9 +24,9 @@ vi.mock('../lib/config.js', () => ({
 // (chained flags, env-driven port, success hook) without running the flow.
 // `attachStatusCommand` and `attachLogoutCommand` fall through to the real
 // cli-core implementations so the integration is exercised end-to-end.
-vi.mock('@doist/cli-core/auth', async () => {
+vi.mock('@todoist/cli-core/auth', async () => {
     const actual =
-        await vi.importActual<typeof import('@doist/cli-core/auth')>('@doist/cli-core/auth')
+        await vi.importActual<typeof import('@todoist/cli-core/auth')>('@todoist/cli-core/auth')
     return {
         ...actual,
         attachLoginCommand: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('@doist/cli-core/auth', async () => {
 })
 
 async function captureAttachOptions() {
-    const { attachLoginCommand } = await import('@doist/cli-core/auth')
+    const { attachLoginCommand } = await import('@todoist/cli-core/auth')
     const login = new Command('login')
     vi.mocked(attachLoginCommand).mockReturnValue(login)
     const { registerAuthCommand } = await import('./auth.js')
@@ -104,7 +104,8 @@ describe('registerAuthCommand', () => {
         vi.mocked(getTokenRefreshOptions).mockReturnValue(
             refresh as unknown as ReturnType<typeof getTokenRefreshOptions>,
         )
-        const { attachStatusCommand, attachTokenViewCommand } = await import('@doist/cli-core/auth')
+        const { attachStatusCommand, attachTokenViewCommand } =
+            await import('@todoist/cli-core/auth')
 
         try {
             await captureAttachOptions()

@@ -1,4 +1,4 @@
-import type { AccountRef, UserRecord, UserRecordStore } from '@doist/cli-core/auth'
+import type { AccountRef, UserRecord, UserRecordStore } from '@todoist/cli-core/auth'
 import { type Config, getConfig, type StoredUser, updateConfig } from './config.js'
 import { makeOutlineAccount, matchOutlineAccount, type OutlineAccount } from './outline-account.js'
 

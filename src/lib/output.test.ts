@@ -1,4 +1,4 @@
-import { captureConsole } from '@doist/cli-core/testing'
+import { captureConsole } from '@todoist/cli-core/testing'
 import { type MockInstance, beforeEach, describe, expect, it } from 'vitest'
 import { lines } from '../_fixtures/testing.js'
 import { BaseCliError } from './errors.js'

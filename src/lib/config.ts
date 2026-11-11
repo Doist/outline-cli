@@ -4,7 +4,7 @@ import {
     readConfig as coreReadConfig,
     updateConfig as coreUpdateConfig,
     writeConfig as coreWriteConfig,
-} from '@doist/cli-core'
+} from '@todoist/cli-core'
 
 const APP_NAME = 'outline-cli'
 

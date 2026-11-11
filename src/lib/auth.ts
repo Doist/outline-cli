@@ -2,7 +2,7 @@ import {
     refreshAccessToken,
     SecureStoreUnavailableError,
     type TokenRefreshOptions,
-} from '@doist/cli-core/auth'
+} from '@todoist/cli-core/auth'
 import { TOKEN_ENV_VAR } from './auth-constants.js'
 import {
     createOutlineAuthProvider,

@@ -5,7 +5,7 @@ import packageJson from '../../../package.json' with { type: 'json' }
 const registerCoreUpdateCommandMock = vi.fn()
 const withSpinnerMock = vi.fn((_opts: unknown, fn: () => Promise<unknown>) => fn())
 
-vi.mock('@doist/cli-core/commands', () => ({
+vi.mock('@todoist/cli-core/commands', () => ({
     registerUpdateCommand: registerCoreUpdateCommandMock,
 }))
 
@@ -35,7 +35,7 @@ describe('ol update wiring', () => {
         const [passedProgram, options] = registerCoreUpdateCommandMock.mock.calls[0]!
         expect(passedProgram).toBe(program)
         expect(options).toMatchObject({
-            packageName: '@doist/outline-cli',
+            packageName: '@todoist/outline-cli',
             configPath: '/tmp/outline-cli-test/config.json',
             changelogCommandName: 'ol changelog',
         })
