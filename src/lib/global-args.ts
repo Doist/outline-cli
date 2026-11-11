@@ -4,7 +4,7 @@ import {
     createSpinnerGate,
     parseGlobalArgs,
     stripUserFlag,
-} from '@doist/cli-core'
+} from '@todoist/cli-core'
 import { CliError } from './errors.js'
 
 const store = createGlobalArgsStore()

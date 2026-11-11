@@ -1,7 +1,7 @@
-import { CliError as CoreCliError, type CliErrorCode, type ErrorType } from '@doist/cli-core'
+import { CliError as CoreCliError, type CliErrorCode, type ErrorType } from '@todoist/cli-core'
 
 export { CoreCliError as BaseCliError }
-export type { ErrorType } from '@doist/cli-core'
+export type { ErrorType } from '@todoist/cli-core'
 
 export type ErrorCode =
     | 'ACCOUNT_NOT_FOUND'
@@ -31,4 +31,4 @@ export class CliError extends CoreCliError<ErrorCode> {
     }
 }
 
-export { getErrorMessage } from '@doist/cli-core'
+export { getErrorMessage } from '@todoist/cli-core'

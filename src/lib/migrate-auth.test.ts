@@ -5,8 +5,8 @@ const fetchMock = vi.hoisted(() => ({ fetchWithRetry: vi.fn() }))
 vi.mock('../transport/fetch-with-retry.js', () => fetchMock)
 
 const cliCoreMock = vi.hoisted(() => ({ migrateLegacyAuth: vi.fn() }))
-vi.mock('@doist/cli-core/auth', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@doist/cli-core/auth')>()
+vi.mock('@todoist/cli-core/auth', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@todoist/cli-core/auth')>()
     return { ...actual, migrateLegacyAuth: cliCoreMock.migrateLegacyAuth }
 })
 

@@ -1,7 +1,7 @@
-import { createSpinner } from '@doist/cli-core'
+import { createSpinner } from '@todoist/cli-core'
 import { shouldDisableSpinner } from './global-args.js'
 
-export type { SpinnerColor, SpinnerOptions } from '@doist/cli-core'
+export type { SpinnerColor, SpinnerOptions } from '@todoist/cli-core'
 
 const spinner = createSpinner({ isDisabled: shouldDisableSpinner })
 

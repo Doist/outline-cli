@@ -1,4 +1,4 @@
-import type { AccountRef, AuthAccount } from '@doist/cli-core/auth'
+import type { AccountRef, AuthAccount } from '@todoist/cli-core/auth'
 
 /**
  * Narrow account shape persisted by the keyring-backed token store.

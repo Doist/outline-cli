@@ -1,4 +1,4 @@
-import { formatJson, formatNdjson, printEmpty, type ViewOptions } from '@doist/cli-core'
+import { formatJson, formatNdjson, printEmpty, type ViewOptions } from '@todoist/cli-core'
 import chalk from 'chalk'
 import type { Pagination } from './api.js'
 import { BaseCliError } from './errors.js'

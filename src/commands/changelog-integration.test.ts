@@ -1,4 +1,4 @@
-import { createTestProgram } from '@doist/cli-core/testing'
+import { createTestProgram } from '@todoist/cli-core/testing'
 import { describe, expect, it } from 'vitest'
 import { BaseCliError } from '../lib/errors.js'
 import { formatError, formatErrorJson } from '../lib/output.js'

@@ -3,7 +3,7 @@ import {
     attachLogoutCommand,
     attachStatusCommand,
     attachTokenViewCommand,
-} from '@doist/cli-core/auth'
+} from '@todoist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { apiRequest } from '../lib/api.js'

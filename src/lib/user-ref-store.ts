@@ -1,4 +1,4 @@
-import type { AccountRef } from '@doist/cli-core/auth'
+import type { AccountRef } from '@todoist/cli-core/auth'
 import type { OutlineTokenStore } from './auth-provider.js'
 import { CliError } from './errors.js'
 import { getRequestedUserRef } from './global-args.js'

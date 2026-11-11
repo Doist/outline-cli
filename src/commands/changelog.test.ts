@@ -6,7 +6,7 @@ const { registerCoreChangelogCommand } = vi.hoisted(() => ({
     registerCoreChangelogCommand: vi.fn(),
 }))
 
-vi.mock('@doist/cli-core/commands', () => ({
+vi.mock('@todoist/cli-core/commands', () => ({
     registerChangelogCommand: registerCoreChangelogCommand,
 }))
 
@@ -18,7 +18,7 @@ describe('changelog wrapper', () => {
         registerCoreChangelogCommand.mockReset()
     })
 
-    it('delegates to @doist/cli-core/commands with the expected config', () => {
+    it('delegates to @todoist/cli-core/commands with the expected config', () => {
         const program = new Command()
         registerChangelogCommand(program)
 

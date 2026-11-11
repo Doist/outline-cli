@@ -8,7 +8,7 @@ import {
     type KeyringTokenStore,
     type MigrateAuthResult,
     type TokenBundle,
-} from '@doist/cli-core/auth'
+} from '@todoist/cli-core/auth'
 import { fetchWithRetry } from '../transport/fetch-with-retry.js'
 import { apiRequest } from './api.js'
 import { LEGACY_CLEAR_PAYLOAD, SECURE_STORE_SERVICE, TOKEN_ENV_VAR } from './auth-constants.js'

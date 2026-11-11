@@ -1,4 +1,4 @@
-import { createTestProgram, describeEmptyMachineOutput } from '@doist/cli-core/testing'
+import { createTestProgram, describeEmptyMachineOutput } from '@todoist/cli-core/testing'
 import { vi } from 'vitest'
 import { mockOutlineAuthModule } from '../_fixtures/testing.js'
 
