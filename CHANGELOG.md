@@ -1,3 +1,13 @@
+## [3.0.0](https://github.com/todoist/outline-cli/compare/v2.5.4...v3.0.0) (2026-11-11)
+
+### ⚠ BREAKING CHANGES
+
+* publish as @todoist/outline-cli (#174)
+
+### Features
+
+* publish as @todoist/outline-cli ([#174](https://github.com/todoist/outline-cli/issues/174)) ([d1ddf8b](https://github.com/todoist/outline-cli/commit/d1ddf8b7d331bbbf4e9e13a3f20763de560ff512))
+
 ## [2.5.4](https://github.com/todoist/outline-cli/compare/v2.5.3...v2.5.4) (2026-11-11)
 
 ### Bug Fixes
