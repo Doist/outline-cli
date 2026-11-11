@@ -47,7 +47,7 @@ npm uninstall -g @doist/outline-cli
 ## Local Setup
 
 ```bash
-git clone https://github.com/Doist/outline-cli.git
+git clone https://github.com/todoist/outline-cli.git
 cd outline-cli
 npm install
 npm run build
