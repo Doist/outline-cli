@@ -1,3 +1,9 @@
+## [2.5.4](https://github.com/todoist/outline-cli/compare/v2.5.3...v2.5.4) (2026-11-11)
+
+### Bug Fixes
+
+* **ci:** use the todoist GitHub org after the rename ([#173](https://github.com/todoist/outline-cli/issues/173)) ([b9938ef](https://github.com/todoist/outline-cli/commit/b9938efe45f9188a9c1bfaf45e27b87ca34bb9c9))
+
 ## [2.5.3](https://github.com/Doist/outline-cli/compare/v2.5.2...v2.5.3) (2026-11-11)
 
 ### Bug Fixes
