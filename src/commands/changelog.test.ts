@@ -26,7 +26,7 @@ describe('changelog wrapper', () => {
         const [passedProgram, config] = registerCoreChangelogCommand.mock.calls[0]
         expect(passedProgram).toBe(program)
         expect(basename(config.path)).toBe('CHANGELOG.md')
-        expect(config.repoUrl).toBe('https://github.com/Doist/outline-cli')
+        expect(config.repoUrl).toBe('https://github.com/todoist/outline-cli')
         expect(config.version).toBe(packageJson.version)
         expect(config.bulletMarkers).toEqual(['*', '-'])
     })
