@@ -2,6 +2,7 @@
 import { Command } from 'commander'
 import packageJson from '../package.json' with { type: 'json' }
 import { registerAccountCommand } from './commands/account.js'
+import { registerAttachmentCommand } from './commands/attachment.js'
 import { registerAuthCommand } from './commands/auth.js'
 import { registerChangelogCommand } from './commands/changelog.js'
 import { registerCollectionCommand } from './commands/collection.js'
@@ -38,6 +39,7 @@ registerAccountCommand(program)
 registerSearchCommand(program)
 registerDocumentCommand(program)
 registerCollectionCommand(program)
+registerAttachmentCommand(program)
 registerSkillCommand(program)
 registerChangelogCommand(program)
 registerUpdateCommand(program)

@@ -1,6 +1,6 @@
 export const SKILL_NAME = 'outline-cli'
 export const SKILL_DESCRIPTION =
-    'Search and manage Outline wiki documents and collections via the ol CLI'
+    'Search and manage Outline wiki documents, collections and attachments via the ol CLI'
 
 export const SKILL_CONTENT = `# Outline CLI (ol)
 
@@ -14,6 +14,8 @@ Use this skill when the user wants to interact with their Outline wiki/knowledge
 - \`ol doc open <id>\` - Open document in browser
 - \`ol doc create --title "Title" --collection <id>\` - Create document
 - \`ol col list\` - List collections
+- \`ol attachment upload <file> --doc <ref>\` - Upload a file to a document
+- \`ol attachment download <id>\` - Download an attachment
 - \`ol account\` - List stored accounts; \`ol account use <id|name>\` sets the default
 
 ## Output Formats
@@ -82,6 +84,22 @@ ol col update <id> --name "New Name"
 ol col delete <id> --confirm
 \`\`\`
 
+### Attachments (alias: attach)
+\`\`\`bash
+ol attachment upload ./plan.pdf --doc <ref>            # Upload; prints the markdown link to paste into the doc
+ol attachment upload ./plan.pdf --doc <ref> --append   # Upload and append the link to the end of the doc
+ol attachment upload ./photo.jpg --doc <ref> --name "Site photo.jpg" --content-type image/jpeg
+ol attachment upload ./plan.pdf --doc <ref> --json     # {id, name, contentType, size, documentId, url, markdown}
+ol attachment list --doc <ref>                         # Attachments and images linked in the doc (id, name, size, type)
+ol attachment list --doc <ref> --json
+ol attachment download <id|link>                       # Save under the original file name in the current directory
+ol attachment download <id|link> --output ./files/     # Into a directory, or --output <path> for a file name
+ol attachment download <id|link> --output -            # Write the file to stdout
+ol attachment download <id|link> --force               # Overwrite an existing file (refused otherwise)
+ol attachment delete <id|link> --confirm               # Delete the file; links to it in documents stay
+\`\`\`
+An attachment is referenced by its ID or any link containing \`/api/attachments.redirect?id=<id>\`. Images are linked as \`![alt](/api/attachments.redirect?id=<id>)\`, other files as \`[<name> <bytes>](/api/attachments.redirect?id=<id>)\`; keep that form when writing it into a document yourself.
+
 ### Authentication
 \`\`\`bash
 ol auth login                          # OAuth login (opens browser); prompts for base URL + client ID if needed
@@ -147,6 +165,14 @@ ol doc get <id> --raw > doc.md            # then edit doc.md
 ol doc update <id> --file doc.md --if-updated-at "$ts"
 \`\`\`
 If the document was saved after \`$ts\`, the update fails with \`DOCUMENT_CHANGED\`, or with Outline's "Document has been modified since the provided revision" when the save lands during the update; re-read and retry. Edits not yet saved from an open editor are not detected.
+
+### Attach a file and download every attachment of a document
+\`\`\`bash
+ol attachment upload ./drawing.pdf --doc <ref> --append
+ol attachment list --doc <ref> --json | jq -r '.[].id' | while read -r id; do
+  ol attachment download "$id" --output ./downloads/
+done
+\`\`\`
 
 ### List all collections and their documents
 \`\`\`bash

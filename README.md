@@ -133,6 +133,13 @@ ol document move <urlId> --collection <target-id>
 ol document archive <urlId>
 ol document unarchive <urlId>
 
+# Attachments (alias: ol attach)
+ol attachment upload ./plan.pdf --doc <ref>           # prints the markdown link for the file
+ol attachment upload ./plan.pdf --doc <ref> --append  # also appends that link to the document
+ol attachment list --doc <ref>                        # attachments and images linked in a document
+ol attachment download <id|link>                      # saves under the original name; --output <path|dir|->, --force
+ol attachment delete <id|link> --confirm
+
 # Collections (alias: ol col)
 ol collection list
 ol collection get <id>
