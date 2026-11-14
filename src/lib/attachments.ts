@@ -372,12 +372,10 @@ async function openAttachment(id: string): Promise<{ response: Response; url: st
         if (response.status >= 300 && response.status < 400 && location) {
             // Release the connection before following the redirect.
             await response.body?.cancel().catch(() => {})
-            // Instance paths stay relative so authorizedFetch resolves them
-            // against the base URL, like every other request.
-            url =
-                location.startsWith('/') && !location.startsWith('//')
-                    ? location
-                    : new URL(location, requested).toString()
+            // Standard redirect semantics: resolve against the URL just
+            // requested. authorizedFetch scopes the token by origin, so a
+            // storage URL never receives it.
+            url = new URL(location, requested).toString()
             continue
         }
         if (!response.ok) throw await toApiError(response)

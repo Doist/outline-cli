@@ -190,6 +190,7 @@ describe('uploadAttachment', () => {
         await writeFile(file, 'hello')
         apiMocks.apiRequest.mockReset()
         apiMocks.authorizedFetch.mockReset()
+        apiMocks.toApiError.mockClear()
     })
 
     afterEach(async () => {
@@ -352,6 +353,7 @@ describe('downloadAttachment', () => {
         dir = await mkdtemp(join(tmpdir(), `ol-download-${process.pid}-`))
         process.chdir(dir)
         apiMocks.authorizedFetch.mockReset()
+        apiMocks.toApiError.mockClear()
     })
 
     afterEach(async () => {
@@ -366,7 +368,7 @@ describe('downloadAttachment', () => {
                     status: 302,
                     headers: { location: '/api/files.get?sig=signed' },
                 }),
-                url: `${BASE}/api/x`,
+                url: `${BASE}/api/attachments.redirect?id=${ID}`,
                 onInstance: true,
             })
             .mockResolvedValueOnce({
@@ -388,7 +390,7 @@ describe('downloadAttachment', () => {
             `/api/attachments.redirect?id=${ID}`,
             { method: 'GET', redirect: 'manual' },
         ])
-        expect(apiMocks.authorizedFetch.mock.calls[1][0]).toBe('/api/files.get?sig=signed')
+        expect(apiMocks.authorizedFetch.mock.calls[1][0]).toBe(`${BASE}/api/files.get?sig=signed`)
         expect(result).toEqual({ id: ID, name: 'a.txt', path: 'a.txt', size: 7 })
         expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('content')
     })
@@ -490,6 +492,41 @@ describe('downloadAttachment', () => {
         )
         expect(result.name).toBe('plan.pdf')
     })
+
+    it.each([
+        [
+            'a storage redirect',
+            'https://bucket.s3.amazonaws.com/a?s=1',
+            '/signed/file?s=2',
+            'https://bucket.s3.amazonaws.com/signed/file?s=2',
+        ],
+        [
+            'a sub-path install',
+            'https://example.com/wiki/api/attachments.redirect?id=1',
+            '/wiki/api/files.get?sig=s',
+            'https://example.com/wiki/api/files.get?sig=s',
+        ],
+    ])(
+        'resolves a root-relative redirect against the requested URL (%s)',
+        async (_case, requested, location, expected) => {
+            apiMocks.authorizedFetch
+                .mockResolvedValueOnce({
+                    response: new Response(null, { status: 302, headers: { location } }),
+                    url: requested,
+                    onInstance: false,
+                })
+                .mockResolvedValueOnce({
+                    response: new Response('x', {
+                        headers: { 'content-disposition': 'attachment; filename="a.txt"' },
+                    }),
+                    url: expected,
+                    onInstance: false,
+                })
+            const { downloadAttachment } = await import('./attachments.js')
+            await downloadAttachment(ID)
+            expect(apiMocks.authorizedFetch.mock.calls[1][0]).toBe(expected)
+        },
+    )
 
     it('cancels the redirect response body before following it', async () => {
         const cancel = vi.fn()
