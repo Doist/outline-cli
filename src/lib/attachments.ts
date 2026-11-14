@@ -5,6 +5,7 @@ import { basename, extname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
+import { type Tokens, marked } from 'marked'
 import { apiRequest, authorizedFetch, toApiError } from './api.js'
 import { CliError } from './errors.js'
 
@@ -89,10 +90,13 @@ export function attachmentPath(id: string): string {
 /**
  * Markdown that Outline renders as the attachment: an image for image types,
  * otherwise a file attachment, whose link label is `<name> <size in bytes>`.
+ * Brackets and backslashes are dropped from the label rather than escaped:
+ * Outline's attachment rule reads only the first text token of the label, so
+ * an escaped `\[` cuts the stored title short. The file keeps its real name.
  */
 export function attachmentMarkdown(attachment: Attachment): string {
     const path = attachmentPath(attachment.id)
-    const name = attachment.name.replace(/[[\]]/g, '')
+    const name = attachment.name.replace(/[[\]\\]/g, '')
     if (attachment.contentType.startsWith('image/')) {
         return `![${name}](${path})`
     }
@@ -117,36 +121,35 @@ export function parseAttachmentId(ref: string): string {
 /**
  * Find the attachments and images a document links to, in order of first
  * appearance. Outline writes file attachments as `[<name> <bytes>](<link>)`
- * and images as `![<alt>](<link>)`.
+ * and images as `![<alt>](<link>)`. The markdown is tokenized rather than
+ * scanned with a regex, so escaped or nested brackets in a label are read
+ * correctly and links inside inline or fenced code are not counted.
  */
 export function extractLinkedAttachments(markdown: string): LinkedAttachment[] {
-    const linkRe = new RegExp(
-        `(!?)\\[([^\\]]*)\\]\\(([^)\\s]*attachments\\.redirect\\?(?:[^)\\s]*&)?id=(${UUID})[^)]*)\\)`,
-        'g',
-    )
     const seen = new Set<string>()
     const result: LinkedAttachment[] = []
-    for (const match of markdown.matchAll(linkRe)) {
-        const [, bang, label, url, rawId] = match
-        const id = rawId.toLowerCase()
-        if (seen.has(id)) continue
+    marked.walkTokens(marked.lexer(markdown), (token) => {
+        if (token.type !== 'link' && token.type !== 'image') return
+        const { href, text } = token as Tokens.Link | Tokens.Image
+        const match = href.match(REDIRECT_ID_RE)
+        if (!match) return
+        const id = match[1].toLowerCase()
+        if (seen.has(id)) return
         seen.add(id)
-        const href = url.split(/\s/)[0]
-        if (bang) {
-            result.push({ id, name: label, size: null, type: 'image', url: href })
-            continue
+        if (token.type === 'image') {
+            result.push({ id, name: text, size: null, type: 'image', url: href })
+            return
         }
-        const parts = label.trim().split(' ')
-        const last = parts[parts.length - 1]
-        const hasSize = parts.length > 1 && /^\d+$/.test(last)
+        const label = text.trim()
+        const sizeMatch = label.match(/^(.+) (\d+)$/)
         result.push({
             id,
-            name: hasSize ? parts.slice(0, -1).join(' ') : label.trim(),
-            size: hasSize ? Number(last) : null,
+            name: sizeMatch ? sizeMatch[1] : label,
+            size: sizeMatch ? Number(sizeMatch[2]) : null,
             type: 'file',
             url: href,
         })
-    }
+    })
     return result
 }
 
@@ -341,7 +344,10 @@ export async function downloadAttachment(
     if (!response.body) {
         throw new CliError('DOWNLOAD_FAILED', `Attachment ${id} returned no content.`)
     }
-    const body = Readable.fromWeb(response.body as WebReadableStream<Uint8Array>)
+    const webBody = response.body as WebReadableStream<Uint8Array>
+    // Wrap the body only right before piping it: a Node stream that errors
+    // while nothing listens (e.g. during the awaits below) is an uncaught error.
+    const toNode = () => Readable.fromWeb(webBody)
     let size = 0
     // Count bytes inside the pipeline: a 'data' listener would switch the
     // stream to flowing mode and drop chunks emitted before the pipe is set up.
@@ -353,17 +359,25 @@ export async function downloadAttachment(
     }
 
     if (target.output === '-') {
-        await pipeline(body, countBytes, process.stdout, { end: false })
+        await pipeline(toNode(), countBytes, process.stdout, { end: false })
         return { id, name, path: '-', size }
     }
 
     const path = await resolveOutputPath(target.output, name)
+    // Only a file this download created or opened may be removed on failure;
+    // a failure before the open (the response stream erroring first) must
+    // never touch a file that was already there.
+    const existedBefore = await stat(path).then(
+        () => true,
+        () => false,
+    )
+    const destination = createWriteStream(path, { flags: target.force ? 'w' : 'wx' })
+    let opened = false
+    destination.once('open', () => {
+        opened = true
+    })
     try {
-        await pipeline(
-            body,
-            countBytes,
-            createWriteStream(path, { flags: target.force ? 'w' : 'wx' }),
-        )
+        await pipeline(toNode(), countBytes, destination)
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
             throw new CliError('FILE_EXISTS', `File already exists: ${path}`, [
@@ -371,7 +385,7 @@ export async function downloadAttachment(
             ])
         }
         // Do not leave a partial file behind.
-        await unlink(path).catch(() => {})
+        if (opened || !existedBefore) await unlink(path).catch(() => {})
         const message = error instanceof Error ? error.message : String(error)
         throw new CliError('DOWNLOAD_FAILED', `Download of attachment ${id} failed: ${message}`)
     }

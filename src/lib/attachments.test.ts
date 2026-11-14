@@ -82,6 +82,26 @@ describe('attachment helpers', () => {
         ])
     })
 
+    it('reads escaped and nested brackets in labels', async () => {
+        const { extractLinkedAttachments } = await import('./attachments.js')
+        const other = ID.replace('3e', '4e')
+        const text = [
+            `[plan \\[final\\].pdf 12](/api/attachments.redirect?id=${ID})`,
+            `![dot [x] y](/api/attachments.redirect?id=${other})`,
+        ].join('\n\n')
+        expect(extractLinkedAttachments(text).map((a) => [a.name, a.size, a.type])).toEqual([
+            ['plan [final].pdf', 12, 'file'],
+            ['dot [x] y', null, 'image'],
+        ])
+    })
+
+    it('ignores attachment links inside inline and fenced code', async () => {
+        const { extractLinkedAttachments } = await import('./attachments.js')
+        const link = `[example 1](/api/attachments.redirect?id=${ID})`
+        const text = ['`' + link + '`', '```', link, '```', '    ' + link].join('\n\n')
+        expect(extractLinkedAttachments(text)).toEqual([])
+    })
+
     it('reads file names from Content-Disposition, keeping only the base name', async () => {
         const { fileNameFromDisposition } = await import('./attachments.js')
         expect(fileNameFromDisposition('attachment; filename="a b.pdf"')).toBe('a b.pdf')
@@ -336,6 +356,42 @@ describe('downloadAttachment', () => {
         redirectThenFile('new')
         await downloadAttachment(ID, { force: true })
         expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('new')
+    })
+
+    it('keeps an existing file when the response stream fails before the file opens', async () => {
+        await writeFile(join(dir, 'a.txt'), 'original')
+        apiMocks.authorizedFetch.mockResolvedValueOnce({
+            response: new Response(
+                new ReadableStream({
+                    start(controller) {
+                        controller.error(new Error('connection reset'))
+                    },
+                }),
+                { headers: { 'content-disposition': 'attachment; filename="a.txt"' } },
+            ),
+            baseUrl: BASE,
+        })
+        const { downloadAttachment } = await import('./attachments.js')
+        await expect(downloadAttachment(ID)).rejects.toThrow()
+        expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('original')
+    })
+
+    it('removes the partial new file when the response stream fails', async () => {
+        apiMocks.authorizedFetch.mockResolvedValueOnce({
+            response: new Response(
+                new ReadableStream({
+                    start(controller) {
+                        controller.enqueue(new TextEncoder().encode('part'))
+                        controller.error(new Error('connection reset'))
+                    },
+                }),
+                { headers: { 'content-disposition': 'attachment; filename="b.txt"' } },
+            ),
+            baseUrl: BASE,
+        })
+        const { downloadAttachment } = await import('./attachments.js')
+        await expect(downloadAttachment(ID)).rejects.toThrow('connection reset')
+        await expect(readFile(join(dir, 'b.txt'))).rejects.toThrow('ENOENT')
     })
 
     it('reports Outline errors such as a missing attachment', async () => {
