@@ -132,6 +132,85 @@ describe('apiRequest', () => {
         expect(headers.Authorization).toBe('Bearer rotated-proactive')
     })
 
+    it('authorizedFetch sends the bearer token to paths on the instance', async () => {
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const f = fetchWithRetry as ReturnType<typeof vi.fn>
+        f.mockResolvedValue(new Response(null, { status: 302, headers: { location: '/x' } }))
+
+        const { authorizedFetch } = await import('./api.js')
+        const result = await authorizedFetch('/api/attachments.redirect?id=1', {
+            method: 'GET',
+            redirect: 'manual',
+        })
+
+        expect(result.url).toBe('https://test.outline.com/api/attachments.redirect?id=1')
+        expect(result.onInstance).toBe(true)
+        expect(result.response.status).toBe(302)
+        expect(f).toHaveBeenCalledWith({
+            url: 'https://test.outline.com/api/attachments.redirect?id=1',
+            options: {
+                method: 'GET',
+                headers: { Authorization: 'Bearer test-token' },
+                redirect: 'manual',
+            },
+        })
+    })
+
+    it('authorizedFetch keeps a sub-path in the base URL, like apiRequest', async () => {
+        authMocks.getRequestContext.mockResolvedValue({ baseUrl: 'https://example.com/wiki' })
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const f = fetchWithRetry as ReturnType<typeof vi.fn>
+        f.mockResolvedValue(new Response('ok'))
+
+        const { authorizedFetch } = await import('./api.js')
+        const result = await authorizedFetch('/api/files.create', { method: 'POST' })
+
+        expect(f.mock.calls[0][0].url).toBe('https://example.com/wiki/api/files.create')
+        expect(result.onInstance).toBe(true)
+    })
+
+    it('authorizedFetch never sends the token to another origin', async () => {
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const f = fetchWithRetry as ReturnType<typeof vi.fn>
+        f.mockResolvedValue(new Response(null, { status: 401 }))
+        const body = new Blob(['x'])
+
+        const { authorizedFetch } = await import('./api.js')
+        const result = await authorizedFetch('https://bucket.s3.amazonaws.com/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
+            body,
+        })
+
+        expect(f).toHaveBeenCalledTimes(1)
+        expect(f.mock.calls[0][0].options).toEqual({
+            method: 'POST',
+            headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
+            body,
+        })
+        expect(result.onInstance).toBe(false)
+        // A 401 from third-party storage is not a token problem: no refresh.
+        expect(authMocks.reactiveRefresh).not.toHaveBeenCalled()
+    })
+
+    it('authorizedFetch refreshes and retries once on a 401 from the instance', async () => {
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const f = fetchWithRetry as ReturnType<typeof vi.fn>
+        f.mockResolvedValueOnce(errResponse(401, 'Unauthorized'))
+        f.mockResolvedValueOnce(new Response('ok'))
+        authMocks.reactiveRefresh.mockResolvedValueOnce(true)
+        authMocks.getApiToken
+            .mockResolvedValueOnce('stale-token')
+            .mockResolvedValueOnce('rotated-token')
+
+        const { authorizedFetch } = await import('./api.js')
+        const { response } = await authorizedFetch('/api/files.create', { method: 'POST' })
+
+        expect(response.ok).toBe(true)
+        const retryHeaders = f.mock.calls[1][0].options.headers as Record<string, string>
+        expect(retryHeaders.Authorization).toBe('Bearer rotated-token')
+    })
+
     it('does not refresh when OUTLINE_API_TOKEN is set (unmanaged token)', async () => {
         vi.stubEnv('OUTLINE_API_TOKEN', 'env-tok')
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')

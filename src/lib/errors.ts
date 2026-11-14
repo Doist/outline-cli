@@ -9,6 +9,10 @@ export type ErrorCode =
     | 'CONFIRMATION_REQUIRED'
     | 'CONFLICTING_OPTIONS'
     | 'DOCUMENT_CHANGED'
+    | 'DOWNLOAD_FAILED'
+    | 'FILE_EXISTS'
+    | 'FILE_NOT_FOUND'
+    | 'INVALID_ATTACHMENT'
     | 'INVALID_PARENT'
     | 'INVALID_TIMESTAMP'
     | 'INVALID_USER_FLAG'
@@ -19,6 +23,7 @@ export type ErrorCode =
     | 'OAUTH_CLIENT_ID_REQUIRED'
     | 'OAUTH_LOGIN_FAILED'
     | 'UNKNOWN_AGENT'
+    | 'UPLOAD_FAILED'
 
 export class CliError extends CoreCliError<ErrorCode> {
     constructor(
