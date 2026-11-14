@@ -143,7 +143,8 @@ describe('apiRequest', () => {
             redirect: 'manual',
         })
 
-        expect(result.baseUrl).toBe('https://test.outline.com')
+        expect(result.url).toBe('https://test.outline.com/api/attachments.redirect?id=1')
+        expect(result.onInstance).toBe(true)
         expect(result.response.status).toBe(302)
         expect(f).toHaveBeenCalledWith({
             url: 'https://test.outline.com/api/attachments.redirect?id=1',
@@ -155,6 +156,19 @@ describe('apiRequest', () => {
         })
     })
 
+    it('authorizedFetch keeps a sub-path in the base URL, like apiRequest', async () => {
+        authMocks.getRequestContext.mockResolvedValue({ baseUrl: 'https://example.com/wiki' })
+        const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
+        const f = fetchWithRetry as ReturnType<typeof vi.fn>
+        f.mockResolvedValue(new Response('ok'))
+
+        const { authorizedFetch } = await import('./api.js')
+        const result = await authorizedFetch('/api/files.create', { method: 'POST' })
+
+        expect(f.mock.calls[0][0].url).toBe('https://example.com/wiki/api/files.create')
+        expect(result.onInstance).toBe(true)
+    })
+
     it('authorizedFetch never sends the token to another origin', async () => {
         const { fetchWithRetry } = await import('../transport/fetch-with-retry.js')
         const f = fetchWithRetry as ReturnType<typeof vi.fn>
@@ -162,7 +176,7 @@ describe('apiRequest', () => {
         const body = new Blob(['x'])
 
         const { authorizedFetch } = await import('./api.js')
-        await authorizedFetch('https://bucket.s3.amazonaws.com/', {
+        const result = await authorizedFetch('https://bucket.s3.amazonaws.com/', {
             method: 'POST',
             headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
             body,
@@ -174,6 +188,7 @@ describe('apiRequest', () => {
             headers: { 'Content-Type': 'multipart/form-data; boundary=b' },
             body,
         })
+        expect(result.onInstance).toBe(false)
         // A 401 from third-party storage is not a token problem: no refresh.
         expect(authMocks.reactiveRefresh).not.toHaveBeenCalled()
     })

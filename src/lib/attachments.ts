@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { createWriteStream, openAsBlob } from 'node:fs'
-import { stat, unlink } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { lstat, mkdir, stat, unlink } from 'node:fs/promises'
+import { basename, dirname, extname, join, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { type Tokens, marked } from 'marked'
-import { apiRequest, authorizedFetch, toApiError } from './api.js'
+import { type AuthorizedFetchResult, apiRequest, authorizedFetch, toApiError } from './api.js'
 import { CliError } from './errors.js'
+import { withSpinner } from './spinner.js'
 
-export interface Attachment {
+export type Attachment = {
     id: string
     name: string
     contentType: string
@@ -19,7 +20,7 @@ export interface Attachment {
 }
 
 /** Response of `attachments.create`; servers before upload modes omit `mode`. */
-interface CreateAttachmentResponse {
+type CreateAttachmentResponse = {
     mode?: 'post' | 'put'
     uploadUrl?: string
     form?: Record<string, string>
@@ -29,7 +30,7 @@ interface CreateAttachmentResponse {
 }
 
 /** An attachment or image linked from a document's markdown. */
-export interface LinkedAttachment {
+export type LinkedAttachment = {
     id: string
     name: string
     /** Size in bytes from the link label (file attachments only). */
@@ -187,6 +188,19 @@ export function buildMultipartBody(
     return { body: new Blob(parts), contentType: `multipart/form-data; boundary=${boundary}` }
 }
 
+/**
+ * Error for a failed transfer to third-party storage (S3 and compatibles),
+ * which answers with an XML error body rather than Outline's JSON.
+ */
+async function toStorageError(res: Response): Promise<Error> {
+    let detail = ''
+    try {
+        detail = (await res.text()).match(/<Message>([^<]*)<\/Message>/)?.[1]?.trim() ?? ''
+    } catch {}
+    const status = `${res.status} ${res.statusText}`.trim()
+    return new Error(`Storage error: ${status}${detail ? ` (${detail})` : ''}`)
+}
+
 export type UploadOptions = {
     filePath: string
     documentId: string
@@ -224,30 +238,36 @@ export async function uploadAttachment(opts: UploadOptions): Promise<Attachment>
     })
 
     try {
-        const blob = await openAsBlob(opts.filePath, { type: contentType })
-        let response: Response
-        if (data.mode === 'put') {
-            if (!data.url) throw new Error('Outline did not return an upload URL')
-            ;({ response } = await authorizedFetch(data.url, {
-                method: 'PUT',
-                headers: { 'Content-Type': contentType, ...data.headers },
-                body: blob,
-            }))
-        } else {
-            if (!data.uploadUrl) throw new Error('Outline did not return an upload URL')
-            const multipart = buildMultipartBody(data.form ?? {}, {
-                field: 'file',
-                name,
-                contentType,
-                blob,
-            })
-            ;({ response } = await authorizedFetch(data.uploadUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': multipart.contentType },
-                body: multipart.body,
-            }))
-        }
-        if (!response.ok) throw await toApiError(response)
+        await withSpinner({ text: 'Uploading file...', color: 'green' }, async () => {
+            const blob = await openAsBlob(opts.filePath, { type: contentType })
+            let result: AuthorizedFetchResult
+            if (data.mode === 'put') {
+                if (!data.url) throw new Error('Outline did not return an upload URL')
+                result = await authorizedFetch(data.url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': contentType, ...data.headers },
+                    body: blob,
+                })
+            } else {
+                if (!data.uploadUrl) throw new Error('Outline did not return an upload URL')
+                const multipart = buildMultipartBody(data.form ?? {}, {
+                    field: 'file',
+                    name,
+                    contentType,
+                    blob,
+                })
+                result = await authorizedFetch(data.uploadUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': multipart.contentType },
+                    body: multipart.body,
+                })
+            }
+            if (!result.response.ok) {
+                throw result.onInstance
+                    ? await toApiError(result.response)
+                    : await toStorageError(result.response)
+            }
+        })
     } catch (error) {
         try {
             await apiRequest('attachments.delete', { id: data.attachment.id })
@@ -260,9 +280,23 @@ export async function uploadAttachment(opts: UploadOptions): Promise<Attachment>
 }
 
 /**
+ * Reduce a server-supplied name to a safe base name: no directories (so it
+ * cannot point outside the chosen folder) and no control characters (so it
+ * cannot write escape sequences to the terminal when printed).
+ */
+export function sanitizeFileName(name: string): string | undefined {
+    let clean = ''
+    for (const char of basename(name.replace(/\\/g, '/'))) {
+        const code = char.codePointAt(0) ?? 0
+        if (code >= 0x20 && code !== 0x7f) clean += char
+    }
+    clean = clean.trim()
+    return clean && clean !== '.' && clean !== '..' ? clean : undefined
+}
+
+/**
  * File name from a `Content-Disposition` header, preferring the RFC 5987
- * `filename*` form. Only the base name is kept so a header cannot direct the
- * download outside the chosen folder.
+ * `filename*` form.
  */
 export function fileNameFromDisposition(header: string | null): string | undefined {
     if (!header) return undefined
@@ -277,13 +311,39 @@ export function fileNameFromDisposition(header: string | null): string | undefin
         const plain = header.match(/filename\s*=\s*"((?:[^"\\]|\\.)*)"|filename\s*=\s*([^;]+)/)
         name = plain ? (plain[1] ?? plain[2])?.replace(/\\(.)/g, '$1').trim() : undefined
     }
-    if (!name) return undefined
-    const base = basename(name.replace(/\\/g, '/'))
-    return base && base !== '.' && base !== '..' ? base : undefined
+    return name ? sanitizeFileName(name) : undefined
+}
+
+/**
+ * File name from the URL the content was served from, for responses without
+ * a `Content-Disposition` name: the storage key's last segment, from the
+ * `key` parameter of Outline's `files.get` or from an S3 object path.
+ */
+export function fileNameFromUrl(url: string): string | undefined {
+    let parsed: URL
+    try {
+        parsed = new URL(url)
+    } catch {
+        return undefined
+    }
+    if (parsed.pathname.endsWith('/api/files.get')) {
+        const key = parsed.searchParams.get('key')
+        return key ? sanitizeFileName(key.split('/').pop() ?? '') : undefined
+    }
+    const last = parsed.pathname.split('/').filter(Boolean).pop()
+    if (!last) return undefined
+    try {
+        return sanitizeFileName(decodeURIComponent(last))
+    } catch {
+        return sanitizeFileName(last)
+    }
 }
 
 export type DownloadTarget = {
-    /** `-` for stdout, an existing directory, or a file path; defaults to the current directory. */
+    /**
+     * `-` for stdout, a directory (an existing one, or any path ending in `/`,
+     * which is created), or a file path; defaults to the current directory.
+     */
     output?: string
     force?: boolean
 }
@@ -301,26 +361,42 @@ export type DownloadResult = {
  * redirect to a signed URL; redirects are followed by hand so the bearer
  * token is only sent to the Outline instance itself.
  */
-async function openAttachment(id: string): Promise<Response> {
+async function openAttachment(id: string): Promise<{ response: Response; url: string }> {
     let url = attachmentPath(id)
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-        const { response, baseUrl } = await authorizedFetch(url, {
+        const { response, url: requested } = await authorizedFetch(url, {
             method: 'GET',
             redirect: 'manual',
         })
         const location = response.headers.get('location')
         if (response.status >= 300 && response.status < 400 && location) {
-            url = new URL(location, new URL(url, `${baseUrl}/`)).toString()
+            // Release the connection before following the redirect.
+            await response.body?.cancel().catch(() => {})
+            // Instance paths stay relative so authorizedFetch resolves them
+            // against the base URL, like every other request.
+            url =
+                location.startsWith('/') && !location.startsWith('//')
+                    ? location
+                    : new URL(location, requested).toString()
             continue
         }
         if (!response.ok) throw await toApiError(response)
-        return response
+        return { response, url: requested }
     }
     throw new Error(`Too many redirects downloading attachment ${id}`)
 }
 
 async function resolveOutputPath(output: string | undefined, name: string): Promise<string> {
     if (!output) return name
+    if (output.endsWith('/') || output.endsWith(sep)) {
+        try {
+            await mkdir(output, { recursive: true })
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            throw new CliError('DOWNLOAD_FAILED', `Cannot create folder ${output}: ${message}`)
+        }
+        return join(output, name)
+    }
     try {
         if ((await stat(output)).isDirectory()) return join(output, name)
     } catch {}
@@ -334,13 +410,17 @@ export async function downloadAttachment(
 ): Promise<DownloadResult> {
     const id = parseAttachmentId(ref)
     let response: Response
+    let servedFrom: string
     try {
-        response = await openAttachment(id)
+        ;({ response, url: servedFrom } = await openAttachment(id))
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         throw new CliError('DOWNLOAD_FAILED', `Download of attachment ${id} failed: ${message}`)
     }
-    const name = fileNameFromDisposition(response.headers.get('content-disposition')) ?? id
+    const name =
+        fileNameFromDisposition(response.headers.get('content-disposition')) ??
+        fileNameFromUrl(servedFrom) ??
+        id
     if (!response.body) {
         throw new CliError('DOWNLOAD_FAILED', `Attachment ${id} returned no content.`)
     }
@@ -367,9 +447,10 @@ export async function downloadAttachment(
     // Only a file this download created or opened may be removed on failure;
     // a failure before the open (the response stream erroring first) must
     // never touch a file that was already there.
-    const existedBefore = await stat(path).then(
+    // `lstat` so a dangling symlink counts as existing; only ENOENT is absence.
+    const existedBefore = await lstat(path).then(
         () => true,
-        () => false,
+        (error: NodeJS.ErrnoException) => error.code !== 'ENOENT',
     )
     const destination = createWriteStream(path, { flags: target.force ? 'w' : 'wx' })
     let opened = false
@@ -386,6 +467,11 @@ export async function downloadAttachment(
         }
         // Do not leave a partial file behind.
         if (opened || !existedBefore) await unlink(path).catch(() => {})
+        if (!opened && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+            throw new CliError('DOWNLOAD_FAILED', `Folder does not exist: ${dirname(path)}`, [
+                'End --output with / to have the folder created',
+            ])
+        }
         const message = error instanceof Error ? error.message : String(error)
         throw new CliError('DOWNLOAD_FAILED', `Download of attachment ${id} failed: ${message}`)
     }

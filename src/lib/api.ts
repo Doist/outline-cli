@@ -180,17 +180,20 @@ export type AuthorizedFetchInit = {
 
 export type AuthorizedFetchResult = {
     response: Response
-    /** Base URL of the instance the request went to (no trailing slash). */
-    baseUrl: string
+    /** Absolute URL the request went to. */
+    url: string
+    /** Whether that URL is on the Outline instance (and so carried the token). */
+    onInstance: boolean
 }
 
 /**
  * Send a raw request with the account's bearer token, for transfers that are
  * not JSON API calls (multipart uploads, file downloads). `url` is either a
- * path on the Outline instance (`/api/...`) or an absolute URL; the token is
- * only attached when the URL is on the instance's own origin, so it never
- * reaches third-party storage such as S3. The response is returned as-is:
- * callers check `ok` and read the body themselves.
+ * path on the Outline instance (`/api/...`, appended to the base URL the same
+ * way `apiRequest` builds its URLs, so a sub-path install keeps its prefix) or
+ * an absolute URL. The token is only attached when the URL is on the
+ * instance's own origin, so it never reaches third-party storage such as S3.
+ * The response is returned as-is: callers check `ok` and read the body.
  */
 export async function authorizedFetch(
     url: string,
@@ -198,8 +201,9 @@ export async function authorizedFetch(
     overrides: ApiRequestOverrides = {},
 ): Promise<AuthorizedFetchResult> {
     const target = await resolveTarget(overrides)
-    const resolved = new URL(url, `${target.baseUrl}/`)
-    const sameOrigin = resolved.origin === new URL(target.baseUrl).origin
+    const instancePath = url.startsWith('/') && !url.startsWith('//')
+    const resolved = new URL(instancePath ? `${target.baseUrl}${url}` : url)
+    const onInstance = resolved.origin === new URL(target.baseUrl).origin
 
     const send = (token?: string) =>
         fetchWithRetry({
@@ -215,8 +219,8 @@ export async function authorizedFetch(
             },
         })
 
-    const response = sameOrigin ? await sendWithAuth(target, send) : await send()
-    return { response, baseUrl: target.baseUrl }
+    const response = onInstance ? await sendWithAuth(target, send) : await send()
+    return { response, url: resolved.toString(), onInstance }
 }
 
 /**

@@ -73,16 +73,12 @@ export function registerAttachmentCommand(program: Command): void {
         .option('--json', 'Output JSON')
         .action(async (file: string, opts) => {
             const doc = await resolveDocumentRef(opts.doc)
-            const attachment = await withSpinner(
-                { text: 'Uploading file...', color: 'green' },
-                () =>
-                    uploadAttachment({
-                        filePath: file,
-                        documentId: doc.id,
-                        name: opts.name,
-                        contentType: opts.contentType,
-                    }),
-            )
+            const attachment = await uploadAttachment({
+                filePath: file,
+                documentId: doc.id,
+                name: opts.name,
+                contentType: opts.contentType,
+            })
             const markdown = attachmentMarkdown(attachment)
 
             if (opts.append) {
@@ -121,7 +117,7 @@ export function registerAttachmentCommand(program: Command): void {
         .description('Download an attachment by ID or link')
         .option(
             '--output <path>',
-            'File path, existing directory, or - for stdout (default: current directory)',
+            'File path, folder (ending in / is created if missing), or - for stdout (default: current directory)',
         )
         .option('--force', 'Overwrite an existing file')
         .option('--json', 'Output JSON')

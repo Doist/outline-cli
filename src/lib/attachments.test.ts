@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -115,6 +115,27 @@ describe('attachment helpers', () => {
         expect(fileNameFromDisposition(null)).toBeUndefined()
     })
 
+    it('strips control characters from server-supplied names', async () => {
+        const { fileNameFromDisposition, sanitizeFileName } = await import('./attachments.js')
+        expect(fileNameFromDisposition('attachment; filename="\u001b[31mred.txt"')).toBe(
+            '[31mred.txt',
+        )
+        expect(sanitizeFileName('a\u0000b\u007fc\n.txt')).toBe('abc.txt')
+        expect(sanitizeFileName('\u001b')).toBeUndefined()
+    })
+
+    it('falls back to the storage key in the served URL for the file name', async () => {
+        const { fileNameFromUrl } = await import('./attachments.js')
+        expect(
+            fileNameFromUrl(
+                'https://bucket.s3.amazonaws.com/uploads/u1/a1/Site%20plan.pdf?X-Amz-Signature=s',
+            ),
+        ).toBe('Site plan.pdf')
+        expect(fileNameFromUrl(`${BASE}/api/files.get?key=uploads/u1/a1/a%25b.pdf`)).toBe('a%b.pdf')
+        expect(fileNameFromUrl(`${BASE}/api/files.get?sig=signed`)).toBeUndefined()
+        expect(fileNameFromUrl('not a url')).toBeUndefined()
+    })
+
     it('encodes multipart bodies with escaped names and the file last', async () => {
         const { buildMultipartBody } = await import('./attachments.js')
         const { body, contentType } = buildMultipartBody(
@@ -186,7 +207,8 @@ describe('uploadAttachment', () => {
         })
         apiMocks.authorizedFetch.mockResolvedValueOnce({
             response: Response.json({ success: true }),
-            baseUrl: BASE,
+            url: `${BASE}/api/x`,
+            onInstance: true,
         })
 
         const { uploadAttachment } = await import('./attachments.js')
@@ -219,7 +241,8 @@ describe('uploadAttachment', () => {
         })
         apiMocks.authorizedFetch.mockResolvedValueOnce({
             response: new Response(null, { status: 204 }),
-            baseUrl: BASE,
+            url: 'https://bucket.s3.amazonaws.com/',
+            onInstance: false,
         })
 
         const { uploadAttachment } = await import('./attachments.js')
@@ -240,7 +263,8 @@ describe('uploadAttachment', () => {
         })
         apiMocks.authorizedFetch.mockResolvedValueOnce({
             response: new Response(null, { status: 200 }),
-            baseUrl: BASE,
+            url: 'https://bucket.s3.amazonaws.com/x',
+            onInstance: false,
         })
 
         const { uploadAttachment } = await import('./attachments.js')
@@ -270,13 +294,41 @@ describe('uploadAttachment', () => {
             .mockResolvedValueOnce({ data: undefined })
         apiMocks.authorizedFetch.mockResolvedValueOnce({
             response: new Response('nope', { status: 413 }),
-            baseUrl: BASE,
+            url: `${BASE}/api/x`,
+            onInstance: true,
         })
 
         const { uploadAttachment } = await import('./attachments.js')
         await expect(uploadAttachment({ filePath: file, documentId: DOC_ID })).rejects.toThrow(
             'Upload of note.txt failed: API error: 413',
         )
+        expect(apiMocks.apiRequest).toHaveBeenLastCalledWith('attachments.delete', { id: ID })
+    })
+
+    it('reports S3 failures as storage errors with the XML message', async () => {
+        apiMocks.apiRequest
+            .mockResolvedValueOnce({
+                data: {
+                    mode: 'post',
+                    uploadUrl: 'https://bucket.s3.amazonaws.com',
+                    attachment: attachment(),
+                },
+            })
+            .mockResolvedValueOnce({ data: undefined })
+        apiMocks.authorizedFetch.mockResolvedValueOnce({
+            response: new Response(
+                '<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>',
+                { status: 403, statusText: 'Forbidden' },
+            ),
+            url: 'https://bucket.s3.amazonaws.com/',
+            onInstance: false,
+        })
+
+        const { uploadAttachment } = await import('./attachments.js')
+        await expect(uploadAttachment({ filePath: file, documentId: DOC_ID })).rejects.toThrow(
+            'Upload of note.txt failed: Storage error: 403 Forbidden (Access Denied)',
+        )
+        expect(apiMocks.toApiError).not.toHaveBeenCalled()
         expect(apiMocks.apiRequest).toHaveBeenLastCalledWith('attachments.delete', { id: ID })
     })
 
@@ -314,13 +366,15 @@ describe('downloadAttachment', () => {
                     status: 302,
                     headers: { location: '/api/files.get?sig=signed' },
                 }),
-                baseUrl: BASE,
+                url: `${BASE}/api/x`,
+                onInstance: true,
             })
             .mockResolvedValueOnce({
                 response: new Response(content, {
                     headers: { 'content-disposition': disposition },
                 }),
-                baseUrl: BASE,
+                url: `${BASE}/api/x`,
+                onInstance: true,
             })
     }
 
@@ -334,7 +388,7 @@ describe('downloadAttachment', () => {
             `/api/attachments.redirect?id=${ID}`,
             { method: 'GET', redirect: 'manual' },
         ])
-        expect(apiMocks.authorizedFetch.mock.calls[1][0]).toBe(`${BASE}/api/files.get?sig=signed`)
+        expect(apiMocks.authorizedFetch.mock.calls[1][0]).toBe('/api/files.get?sig=signed')
         expect(result).toEqual({ id: ID, name: 'a.txt', path: 'a.txt', size: 7 })
         expect(await readFile(join(dir, 'a.txt'), 'utf-8')).toBe('content')
     })
@@ -369,7 +423,8 @@ describe('downloadAttachment', () => {
                 }),
                 { headers: { 'content-disposition': 'attachment; filename="a.txt"' } },
             ),
-            baseUrl: BASE,
+            url: `${BASE}/api/x`,
+            onInstance: true,
         })
         const { downloadAttachment } = await import('./attachments.js')
         await expect(downloadAttachment(ID)).rejects.toThrow()
@@ -387,17 +442,102 @@ describe('downloadAttachment', () => {
                 }),
                 { headers: { 'content-disposition': 'attachment; filename="b.txt"' } },
             ),
-            baseUrl: BASE,
+            url: `${BASE}/api/x`,
+            onInstance: true,
         })
         const { downloadAttachment } = await import('./attachments.js')
         await expect(downloadAttachment(ID)).rejects.toThrow('connection reset')
         await expect(readFile(join(dir, 'b.txt'))).rejects.toThrow('ENOENT')
     })
 
+    it('creates a missing folder when --output ends in a slash', async () => {
+        redirectThenFile('content')
+        const { downloadAttachment } = await import('./attachments.js')
+        const result = await downloadAttachment(ID, { output: './new/nested/' })
+        expect(result.path).toBe(join('new', 'nested', 'a.txt'))
+        expect(await readFile(join(dir, 'new', 'nested', 'a.txt'), 'utf-8')).toBe('content')
+    })
+
+    it('says the folder is missing instead of a raw ENOENT', async () => {
+        redirectThenFile('content')
+        const { downloadAttachment } = await import('./attachments.js')
+        await expect(downloadAttachment(ID, { output: './missing/a.txt' })).rejects.toThrow(
+            'Folder does not exist: ./missing',
+        )
+    })
+
+    it('names the file from the served URL when there is no Content-Disposition', async () => {
+        apiMocks.authorizedFetch
+            .mockResolvedValueOnce({
+                response: new Response(null, {
+                    status: 302,
+                    headers: {
+                        location: 'https://bucket.s3.amazonaws.com/uploads/u/a/plan.pdf?s=1',
+                    },
+                }),
+                url: `${BASE}/api/attachments.redirect?id=${ID}`,
+                onInstance: true,
+            })
+            .mockResolvedValueOnce({
+                response: new Response('pdf'),
+                url: 'https://bucket.s3.amazonaws.com/uploads/u/a/plan.pdf?s=1',
+                onInstance: false,
+            })
+        const { downloadAttachment } = await import('./attachments.js')
+        const result = await downloadAttachment(ID)
+        expect(apiMocks.authorizedFetch.mock.calls[1][0]).toBe(
+            'https://bucket.s3.amazonaws.com/uploads/u/a/plan.pdf?s=1',
+        )
+        expect(result.name).toBe('plan.pdf')
+    })
+
+    it('cancels the redirect response body before following it', async () => {
+        const cancel = vi.fn()
+        apiMocks.authorizedFetch
+            .mockResolvedValueOnce({
+                response: new Response(new ReadableStream({ cancel }), {
+                    status: 302,
+                    headers: { location: '/api/files.get?sig=signed' },
+                }),
+                url: `${BASE}/api/x`,
+                onInstance: true,
+            })
+            .mockResolvedValueOnce({
+                response: new Response('content', {
+                    headers: { 'content-disposition': 'attachment; filename="a.txt"' },
+                }),
+                url: `${BASE}/api/x`,
+                onInstance: true,
+            })
+        const { downloadAttachment } = await import('./attachments.js')
+        await downloadAttachment(ID)
+        expect(cancel).toHaveBeenCalled()
+    })
+
+    it('keeps a dangling symlink when the response stream fails before the file opens', async () => {
+        await symlink(join(dir, 'nowhere.txt'), join(dir, 'a.txt'))
+        apiMocks.authorizedFetch.mockResolvedValueOnce({
+            response: new Response(
+                new ReadableStream({
+                    start(controller) {
+                        controller.error(new Error('connection reset'))
+                    },
+                }),
+                { headers: { 'content-disposition': 'attachment; filename="a.txt"' } },
+            ),
+            url: `${BASE}/api/x`,
+            onInstance: true,
+        })
+        const { downloadAttachment } = await import('./attachments.js')
+        await expect(downloadAttachment(ID)).rejects.toThrow()
+        expect(await readlink(join(dir, 'a.txt'))).toBe(join(dir, 'nowhere.txt'))
+    })
+
     it('reports Outline errors such as a missing attachment', async () => {
         apiMocks.authorizedFetch.mockResolvedValueOnce({
             response: new Response('{}', { status: 404 }),
-            baseUrl: BASE,
+            url: `${BASE}/api/x`,
+            onInstance: true,
         })
         const { downloadAttachment } = await import('./attachments.js')
         await expect(downloadAttachment(ID)).rejects.toThrow(
@@ -408,7 +548,8 @@ describe('downloadAttachment', () => {
     it('stops after too many redirects', async () => {
         apiMocks.authorizedFetch.mockResolvedValue({
             response: new Response(null, { status: 302, headers: { location: '/loop' } }),
-            baseUrl: BASE,
+            url: `${BASE}/api/x`,
+            onInstance: true,
         })
         const { downloadAttachment } = await import('./attachments.js')
         await expect(downloadAttachment(ID)).rejects.toThrow('Too many redirects')

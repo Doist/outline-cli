@@ -93,12 +93,13 @@ ol attachment upload ./plan.pdf --doc <ref> --json     # {id, name, contentType,
 ol attachment list --doc <ref>                         # Attachments and images linked in the doc (id, name, size, type)
 ol attachment list --doc <ref> --json
 ol attachment download <id|link>                       # Save under the original file name in the current directory
-ol attachment download <id|link> --output ./files/     # Into a directory, or --output <path> for a file name
+ol attachment download <id|link> --output ./files/     # Into a folder (created when the path ends in /), or --output <path>
 ol attachment download <id|link> --output -            # Write the file to stdout
 ol attachment download <id|link> --force               # Overwrite an existing file (refused otherwise)
 ol attachment delete <id|link> --confirm               # Delete the file; links to it in documents stay
 \`\`\`
 An attachment is referenced by its ID or any link containing \`/api/attachments.redirect?id=<id>\`. Images are linked as \`![alt](/api/attachments.redirect?id=<id>)\`, other files as \`[<name> <bytes>](/api/attachments.redirect?id=<id>)\`; keep that form when writing it into a document yourself.
+\`attachment list\` reads those links from the document text, so a plain link whose text ends in a number (\`[report 2024](…attachments.redirect?id=…)\`) lists as name \`report\`, size 2024, and links to another Outline instance's attachments are listed but cannot be downloaded from this one.
 
 ### Authentication
 \`\`\`bash
@@ -170,7 +171,7 @@ If the document was saved after \`$ts\`, the update fails with \`DOCUMENT_CHANGE
 \`\`\`bash
 ol attachment upload ./drawing.pdf --doc <ref> --append
 ol attachment list --doc <ref> --json | jq -r '.[].id' | while read -r id; do
-  ol attachment download "$id" --output ./downloads/
+  ol attachment download "$id" --output "./downloads/$id/"   # one folder each: names often repeat
 done
 \`\`\`
 
